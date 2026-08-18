@@ -19,7 +19,7 @@
   panel.innerHTML = `
     <div class="gap-head">
       <span>Blogger AI 도구</span>
-      <button type="button" class="gap-close" title="닫기">✕</button>
+      <span class="gap-head-actions"><button type="button" class="gap-diag" title="편집기 인식 상태 진단">🛠</button><button type="button" class="gap-close" title="닫기">✕</button></span>
     </div>
     <div class="gap-tabs">
       <button type="button" class="gap-tab gap-active" data-tab="write">AI 글쓰기</button>
@@ -101,7 +101,15 @@
     })
   );
 
-  function status(el, text, kind) { el.textContent = text || ""; el.className = "gap-status" + (kind ? " gap-" + kind : ""); }
+  // className 을 통째로 덮어쓰면 gw-status 같은 식별용 클래스까지 지워져
+  // 다음 status() 호출에서 요소를 못 찾는다. 상태 클래스만 교체한다.
+  const STATUS_KINDS = ["gap-ok", "gap-warn", "gap-error", "gap-loading"];
+  function status(el, text, kind) {
+    if (!el) return;
+    el.textContent = text || "";
+    el.classList.remove(...STATUS_KINDS);
+    if (kind) el.classList.add("gap-" + kind);
+  }
 
   // ============ 탭1: 글쓰기 ============
   $(".gw-run").addEventListener("click", async () => {
@@ -146,9 +154,17 @@
   });
   $(".gt-insert").addEventListener("click", () => {
     if (!lastImageDataUrl) return;
-    // TODO(로컬): Blogger 편집기에 <img> 삽입 — 편집기 iframe 본문에 넣는 로직을 실제 DOM에 맞춰 보강.
-    const ok = tryInsertHTML(`<img src="${lastImageDataUrl}" style="max-width:100%"/>`);
-    status($(".gt-status"), ok ? "이미지를 삽입했습니다." : "삽입 실패 — 이미지 저장 후 수동 업로드하세요.", ok ? "ok" : "warn");
+    // data URL 을 그대로 넣으면 글 용량이 커지고 Blogger 가 저장할 때 지울 수도 있다.
+    // 가장 확실한 경로는 [이미지 저장] 후 Blogger 업로드 버튼으로 올리는 것.
+    // 래퍼 <div>로 가운데 정렬하면 안 된다 — 캐럿이 <p> 안에 있을 때
+    // execCommand 가 <p> 안의 <div> 를 평탄화하면서 정렬이 날아간다.
+    // img 자체에 display:block;margin:auto 를 주면 어디에 들어가든 유지된다.
+    const r = insertHTML(`<img src="${lastImageDataUrl}" style="display:block;margin:0 auto;max-width:100%"/>`);
+    status(
+      $(".gt-status"),
+      r.ok ? r.message + " 저장 후에도 남아있지 않으면 [이미지 저장] 후 직접 업로드하세요." : r.message,
+      r.ok ? "ok" : "warn"
+    );
   });
 
   // ============ 탭3: 버튼 마크업 ============
@@ -168,8 +184,8 @@
   $(".gb-insert").addEventListener("click", () => {
     const html = $(".gb-out").value;
     if (!html) return status($(".gb-status"), "먼저 마크업을 생성하세요.", "warn");
-    const ok = tryInsertHTML(html);
-    status($(".gb-status"), ok ? "삽입했습니다(HTML 모드 권장)." : "삽입 실패 — 복사 후 HTML 모드에 붙여넣기.", ok ? "ok" : "warn");
+    const r = insertHTML(html);
+    status($(".gb-status"), r.message, r.ok ? "ok" : "warn");
   });
 
   // ============ 공통: 복사 / 삽입 ============
@@ -185,34 +201,313 @@
   $all(".gap-insert").forEach((btn) =>
     btn.addEventListener("click", () => {
       const src = panel.querySelector("." + btn.dataset.src);
-      insertPlainText(src?.value || "");
+      const text = (src?.value || "").trim();
+      if (!text) return;
+      // Claude 출력은 마크다운이다. 그대로 넣으면 편집기에 ## 와 ** 가 그대로 보인다.
+      // HTML 로 바꿔 넣으면 쓰기 모드에서는 서식이 적용되고, HTML 모드에서는 소스가 들어간다.
+      const r = insertHTML(mdToHtml(text));
+      const st = btn.closest("[data-panel]")?.querySelector(".gap-status");
+      if (st) status(st, r.message, r.ok ? "ok" : "warn");
     })
   );
 
-  // ---------- 편집기 삽입 유틸 (실제 DOM에 맞춰 로컬에서 보강) ----------
-  function editableTargets() {
-    const targets = [];
-    const active = document.activeElement;
-    if (active && (active.isContentEditable || active.tagName === "TEXTAREA")) targets.push({ el: active, doc: document });
-    document.querySelectorAll("iframe").forEach((f) => {
-      try { const b = f.contentDocument?.body; if (b?.isContentEditable) targets.push({ el: b, doc: f.contentDocument, win: f.contentWindow }); } catch (_) {}
-    });
-    return targets;
+  // ============ 진단 (실제 Blogger DOM 확인용) ============
+  $(".gap-diag").addEventListener("click", async () => {
+    const t = resolveTarget();
+    const desc = (c) =>
+      `[${c.kind}] <${c.el.tagName.toLowerCase()}> id=${c.el.id || "-"} ` +
+      `class=${String(c.el.className || "-").slice(0, 60)} area=${Math.round(c.area || 0)} ` +
+      `doc=${c.doc === document ? "top" : "iframe#" + (frameNameOf(c.doc) || "?")}`;
+    const list = collectTargets();
+    const report = [
+      "URL: " + location.href,
+      "편집 후보: " + list.length + "개",
+      "선택될 타깃: " + (t ? desc(t) : "없음"),
+      "기억된 캐럿: " + (lastRange ? "rich(range)" : lastSel ? "html(" + lastSel.join("~") + ")" : "없음"),
+      "",
+      ...list.map((c, i) => i + 1 + ". " + desc(c)),
+    ].join("\n");
+    console.log("[gap] 편집기 진단\n" + report);
+    let copied = false;
+    try { await navigator.clipboard.writeText(report); copied = true; } catch (_) {}
+    // alert 은 쓰지 않는다 — 텍스트 복사가 안 되고 페이지를 멈춘다.
+    diagOut.textContent = report + "\n\n(콘솔 출력" + (copied ? " + 클립보드 복사" : "") + " 완료)";
+    diagOut.classList.remove("gap-hidden");
+  });
+  const diagOut = document.createElement("pre");
+  diagOut.className = "gap-diag-out gap-hidden";
+  diagOut.addEventListener("click", () => diagOut.classList.add("gap-hidden")); // 클릭하면 닫힘
+  panel.appendChild(diagOut);
+
+  // ================================================================
+  // 편집기 삽입 엔진 (P2)
+  // ----------------------------------------------------------------
+  // Blogger 편집기를 다룰 때의 핵심 제약 3가지:
+  //  1) 패널 버튼을 누르는 순간 document.activeElement 는 패널이 된다.
+  //     삽입 시점에 편집기를 찾는 건 이미 늦다. "패널 밖에서 마지막으로
+  //     포커스됐던 편집 영역과 캐럿"을 평소에 기억해 두고 그것을 복원한다.
+  //  2) 쓰기(리치) 모드는 iframe + contenteditable, HTML 모드는 textarea 라
+  //     삽입 방법이 완전히 다르다. 타깃 종류를 보고 분기한다.
+  //  3) 삽입 후 input 이벤트를 발생시켜야 Blogger 내부 모델이 변경을 인지해
+  //     자동 저장에 반영된다.
+  // ================================================================
+
+  // ---------- 문서 / 후보 수집 ----------
+  function inPanel(node) {
+    return node === panel || node === fab || panel.contains(node) || fab.contains(node);
   }
-  function insertPlainText(text) {
-    if (!text) return false;
-    const t = editableTargets()[0];
-    if (!t) return false;
-    if (t.win) t.win.focus(); else t.el.focus();
-    const ok = t.doc.execCommand && t.doc.execCommand("insertText", false, text);
-    if (!ok) t.el.appendChild(t.doc.createTextNode(text));
+  function frameNameOf(doc) {
+    try { const f = doc.defaultView.frameElement; return f && (f.id || f.className || f.name); } catch (_) { return null; }
+  }
+  // 같은 오리진 문서만 순회한다(교차 오리진 iframe 은 접근 시 예외가 난다).
+  function allDocs(root, depth, acc) {
+    root = root || document; depth = depth || 0; acc = acc || [];
+    acc.push(root);
+    if (depth >= 3) return acc;
+    root.querySelectorAll("iframe, frame").forEach((f) => {
+      let d = null;
+      try { d = f.contentDocument; } catch (_) {}
+      if (d && d.body) allDocs(d, depth + 1, acc);
+    });
+    return acc;
+  }
+  function areaOf(el) {
+    try { const r = el.getBoundingClientRect(); return r.width * r.height; } catch (_) { return 0; }
+  }
+  // kind: "rich"(contenteditable) | "html"(textarea). 넓은 순으로 정렬해 본문이 앞에 오게 한다.
+  function collectTargets() {
+    const out = [];
+    allDocs().forEach((doc) => {
+      const win = doc.defaultView;
+      const push = (el, kind) => {
+        if (!el || inPanel(el)) return;
+        const area = areaOf(el);
+        if (area < 1000) return; // 숨겨졌거나 아이콘 크기면 본문이 아니다
+        out.push({ el, doc, win, kind, area });
+      };
+      if (doc.body && doc.body.isContentEditable) push(doc.body, "rich");
+      doc.querySelectorAll('[contenteditable=""],[contenteditable="true"]').forEach((el) => push(el, "rich"));
+      doc.querySelectorAll("textarea").forEach((el) => push(el, "html"));
+    });
+    return out.sort((a, b) => b.area - a.area);
+  }
+
+  // ---------- 마지막 편집 위치 기억 ----------
+  let lastTarget = null; // { el, doc, win, kind }
+  let lastRange = null;  // rich 모드 캐럿
+  let lastSel = null;    // html 모드 캐럿 [start, end]
+
+  function rememberFrom(doc) {
+    const el = doc.activeElement;
+    if (!el || inPanel(el)) return;
+    if (el.tagName === "TEXTAREA") {
+      lastTarget = { el, doc, win: doc.defaultView, kind: "html" };
+      lastSel = [el.selectionStart, el.selectionEnd];
+      lastRange = null;
+      return;
+    }
+    const host = el.isContentEditable ? el : (doc.body && doc.body.isContentEditable ? doc.body : null);
+    if (!host) return;
+    lastTarget = { el: host, doc, win: doc.defaultView, kind: "rich" };
+    lastSel = null;
+    try {
+      const s = doc.getSelection();
+      if (s && s.rangeCount) lastRange = s.getRangeAt(0).cloneRange();
+    } catch (_) {}
+  }
+
+  const watchedDocs = new WeakSet();
+  function watchDoc(doc) {
+    if (!doc || watchedDocs.has(doc)) return;
+    watchedDocs.add(doc);
+    const h = () => rememberFrom(doc);
+    ["focusin", "mouseup", "keyup", "selectionchange"].forEach((ev) => {
+      try { doc.addEventListener(ev, h, true); } catch (_) {}
+    });
+  }
+  // 편집기 iframe 은 늦게 붙고, 쓰기 <-> HTML 모드 전환 때 새로 생기기도 한다.
+  function watchAll() { allDocs().forEach(watchDoc); }
+  watchAll();
+  setInterval(watchAll, 2000);
+
+  function resolveTarget() {
+    if (lastTarget && lastTarget.el.isConnected && areaOf(lastTarget.el) > 0) return lastTarget;
+    // 기억해 둔 타깃이 사라졌다면(모드 전환 등) 캐럿 정보도 함께 버린다.
+    lastRange = null; lastSel = null;
+    return collectTargets()[0] || null;
+  }
+
+  // ---------- 실제 삽입 ----------
+  // 프레임워크가 value setter 를 가로챈 경우에도 값이 들어가도록 네이티브 setter 를 쓴다.
+  function setValue(el, v) {
+    const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
+    if (d && d.set) d.set.call(el, v); else el.value = v;
+  }
+  function fireInput(el, data) {
+    try {
+      el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: data || null }));
+    } catch (_) {
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  function htmlToPlain(html) {
+    const d = document.createElement("div");
+    d.innerHTML = html;
+    return d.textContent || "";
+  }
+
+  // HTML 모드(textarea): 기억해 둔 캐럿 위치에 소스를 끼워 넣는다.
+  function insertIntoTextarea(t, text) {
+    const el = t.el;
+    const len = el.value.length;
+    let s = lastSel ? lastSel[0] : len;
+    let e = lastSel ? lastSel[1] : len;
+    if (s > len || e > len) { s = e = len; } // 내용이 바뀌어 캐럿이 범위를 벗어난 경우
+    const before = el.value.slice(0, s);
+    const after = el.value.slice(e);
+    const glue = before && !before.endsWith("\n") ? "\n" : "";
+    const body = glue + text + "\n";
+    setValue(el, before + body + after);
+    const caret = before.length + body.length;
+    el.focus();
+    try { el.setSelectionRange(caret, caret); } catch (_) {}
+    lastSel = [caret, caret];
+    fireInput(el, text);
     return true;
   }
-  function tryInsertHTML(html) {
-    const t = editableTargets()[0];
-    if (!t) return false;
-    if (t.win) t.win.focus(); else t.el.focus();
-    const ok = t.doc.execCommand && t.doc.execCommand("insertHTML", false, html);
-    return !!ok;
+
+  // 쓰기 모드(contenteditable): 캐럿 복원 후 3단계로 시도한다.
+  function insertIntoRich(t, html) {
+    const doc = t.doc, win = t.win || doc.defaultView;
+    try { win.focus(); } catch (_) {}
+    try { t.el.focus(); } catch (_) {}
+
+    const sel = doc.getSelection();
+    try {
+      sel.removeAllRanges();
+      if (lastRange && lastRange.startContainer && lastRange.startContainer.isConnected) {
+        sel.addRange(lastRange);
+      } else {
+        const r = doc.createRange();
+        r.selectNodeContents(t.el);
+        r.collapse(false); // 캐럿 기록이 없으면 본문 맨 끝
+        sel.addRange(r);
+      }
+    } catch (_) {}
+
+    // 1순위: execCommand — 편집기 자체 실행취소 스택에 남는 유일한 방법.
+    let how = null;
+    try { if (doc.execCommand && doc.execCommand("insertHTML", false, html)) how = "insertHTML"; } catch (_) {}
+
+    // 2순위: 붙여넣기 이벤트 — 에디터가 paste 를 가로채 자체 처리하는 구조일 때 대응.
+    //        preventDefault 되면(dispatchEvent 가 false) 에디터가 처리했다는 뜻.
+    if (!how) {
+      try {
+        const dt = new DataTransfer();
+        dt.setData("text/html", html);
+        dt.setData("text/plain", htmlToPlain(html));
+        const handled = !t.el.dispatchEvent(
+          new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt })
+        );
+        if (handled) how = "paste";
+      } catch (_) {}
+    }
+
+    // 3순위: DOM 직접 삽입 — 거의 항상 성공하지만 편집기 실행취소에는 남지 않는다.
+    if (!how) {
+      try {
+        const holder = doc.createElement("div");
+        holder.innerHTML = html;
+        const frag = doc.createDocumentFragment();
+        let last = null;
+        while (holder.firstChild) { last = holder.firstChild; frag.appendChild(last); }
+        const range = sel.rangeCount ? sel.getRangeAt(0) : null;
+        if (range) { range.deleteContents(); range.insertNode(frag); }
+        else t.el.appendChild(frag);
+        if (last) {
+          const after = doc.createRange();
+          after.setStartAfter(last); after.collapse(true);
+          sel.removeAllRanges(); sel.addRange(after);
+        }
+        how = "dom";
+      } catch (_) {}
+    }
+
+    if (how) {
+      try { lastRange = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null; } catch (_) {}
+      fireInput(t.el, null);
+    }
+    return how;
+  }
+
+  // 공개 진입점: 모드를 판별해 알맞은 방법으로 넣는다.
+  function insertHTML(html) {
+    const t = resolveTarget();
+    if (!t) {
+      return { ok: false, message: "편집기를 찾지 못했습니다. 본문을 한 번 클릭한 뒤 다시 시도하세요." };
+    }
+    if (t.kind === "html") {
+      insertIntoTextarea(t, html);
+      return { ok: true, message: "HTML 모드 본문에 삽입했습니다." };
+    }
+    const how = insertIntoRich(t, html);
+    if (!how) return { ok: false, message: "삽입 실패 — 복사 후 [HTML 보기] 모드에 붙여넣으세요." };
+    return { ok: true, message: `쓰기 모드에 삽입했습니다. (${how})` };
+  }
+
+  // ---------- 마크다운 -> HTML ----------
+  // Claude 출력은 마크다운이라 그대로 넣으면 편집기에 ## 와 ** 가 그대로 노출된다.
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function inlineMd(s) {
+    return esc(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<i>$2</i>")
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+  function mdToHtml(md) {
+    const lines = String(md).replace(/\r\n/g, "\n").split("\n");
+    const out = [];
+    let list = null, code = null, para = [];
+    const flushPara = () => { if (para.length) { out.push("<p>" + inlineMd(para.join(" ")) + "</p>"); para = []; } };
+    const flushList = () => { if (list) { out.push("</" + list + ">"); list = null; } };
+    for (const raw of lines) {
+      if (/^\s*```/.test(raw)) {
+        flushPara(); flushList();
+        if (code === null) code = [];
+        else { out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>"); code = null; }
+        continue;
+      }
+      if (code !== null) { code.push(raw); continue; }
+
+      const line = raw.trim();
+      if (!line) { flushPara(); flushList(); continue; }
+
+      const h = line.match(/^(#{1,6})\s+(.*)$/);
+      if (h) {
+        flushPara(); flushList();
+        // 글 제목이 h1 이므로 마크다운 # 는 h2 부터 매핑한다.
+        const n = Math.min(h[1].length + 1, 6);
+        out.push(`<h${n}>${inlineMd(h[2])}</h${n}>`);
+        continue;
+      }
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) { flushPara(); flushList(); out.push("<hr />"); continue; }
+
+      const ul = line.match(/^[-*+]\s+(.*)$/);
+      const ol = line.match(/^\d+[.)]\s+(.*)$/);
+      if (ul || ol) {
+        flushPara();
+        const want = ul ? "ul" : "ol";
+        if (list !== want) { flushList(); list = want; out.push("<" + want + ">"); }
+        out.push("<li>" + inlineMd((ul || ol)[1]) + "</li>");
+        continue;
+      }
+      flushList();
+      para.push(line);
+    }
+    if (code !== null) out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>");
+    flushPara(); flushList();
+    return out.join("\n");
   }
 })();
