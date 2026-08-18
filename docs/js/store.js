@@ -10,9 +10,11 @@ const DEFAULTS = {
   googleClientId: "",
   blogId: "",
   ghToken: "",
-  ghOwner: "",
-  ghRepo: "",
-  ghBranch: "main",
+  // 이미지 저장소 기본값은 이 리포. 공개 리포라 jsDelivr 가 그대로 서빙한다.
+  // 다른 리포를 쓰려면 설정에서 바꾸면 된다(브랜치 이름 주의 — 이 리포는 master).
+  ghOwner: "Doo-D00",
+  ghRepo: "google-ad-program",
+  ghBranch: "master",
   ghPathPrefix: "images",
 };
 

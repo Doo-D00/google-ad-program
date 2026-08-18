@@ -57,7 +57,9 @@ $("testClaude").addEventListener("click", async () => {
   say($("settingsStatus"), `테스트 중… (${model})`, "loading");
   try {
     await claude.testKey({ apiKey, model });
-    say($("settingsStatus"), `성공! ${model} 키가 정상입니다.`, "ok");
+    // 테스트만 하고 [닫기] 를 누르면 키가 날아간다. 성공했으면 바로 저장해 준다.
+    settings = store.save({ anthropicKey: apiKey, claudeModel: model });
+    say($("settingsStatus"), `성공! ${model} 키가 정상입니다. (저장했습니다)`, "ok");
   } catch (e) {
     say($("settingsStatus"), "실패: " + e.message, "err");
   } finally {
