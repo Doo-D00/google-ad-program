@@ -14,16 +14,12 @@
 | GitHub Pages | `https://doo-d00.github.io/google-ad-program/` |
 | 로컬 | `http://localhost:8765` — `powershell -ExecutionPolicy Bypass -File dev-serve.ps1` |
 
-GitHub Pages 켜기: 리포 **Settings → Pages → Source: Deploy from a branch → `master` / `/docs`**.
+**Pages는 이미 켜져 있습니다** (Source: `master` / `/docs`). `master` 에 푸시하면 1분 내로 반영됩니다.
 
-> ⚠ **이 리포는 현재 private 입니다.** 그래서 지금 상태로는 두 가지가 막힙니다.
-> - **Pages**: 무료 계정은 공개 리포에서만 됩니다(Pro/Team이면 private도 가능).
-> - **jsDelivr**: 공개 리포만 서빙합니다(4번 이미지 호스팅).
->
-> 선택지:
-> 1. 이 리포를 **공개로 전환** — 소스에 키가 없으므로(모두 사용자 입력 → localStorage) 안전합니다.
-> 2. **로컬로만 사용** — `dev-serve.ps1` 로 충분히 다 됩니다. 이미지용으로 **별도 공개 리포**만 하나 만들면 됩니다.
-> 3. 앱과 이미지를 담을 **새 공개 리포**를 따로 만들고 이 리포는 private으로 둡니다.
+> 이 리포는 **공개**입니다. 그래야 Pages(무료 계정)와 jsDelivr(4번 이미지 호스팅)가 동작합니다.
+> 소스에는 키가 없습니다 — 전부 사용자가 입력해 각자 브라우저의 localStorage 에만 저장됩니다.
+> 커밋 작성자 이메일은 `207117628+Doo-D00@users.noreply.github.com` (개인 메일 노출 없음).
+> **앞으로도 키를 코드에 넣지 마세요.** 공개 리포라 그대로 인터넷에 노출됩니다.
 
 > `file://` 로 열면 안 됩니다. ES 모듈과 Google 로그인이 동작하지 않습니다.
 

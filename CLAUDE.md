@@ -7,9 +7,11 @@
 키워드 하나로 **블로그 글 + 썸네일 + 본문 버튼**을 만들고 **버튼 한 번으로 Blogger에 게시**하는
 개인용 도구. 서버 없음, 빌드 도구 없음. 정적 웹앱이고 GitHub Pages로 서빙한다.
 
-- 앱: `https://doo-d00.github.io/google-ad-program/` (Pages: `master` 브랜치 `/docs`)
+- 앱: `https://doo-d00.github.io/google-ad-program/` (Pages 켜짐: `master` 브랜치 `/docs`)
+- 자체 검증: `https://doo-d00.github.io/google-ad-program/dev/selftest.html` (키 없이 순수 로직 28건)
 - 로컬: `powershell -ExecutionPolicy Bypass -File dev-serve.ps1` → `http://localhost:8765`
 - 설정/키 준비 절차는 **`SETUP.md`** 참고 (계정 작업이라 사람이 직접 해야 함)
+- **리포는 공개다. 키를 코드에 넣지 말 것.** 커밋 이메일은 noreply 로 통일되어 있다.
 
 > **왜 크롬 확장이 아닌가**: 게시까지 API로 하면 Blogger 편집기 DOM에 붙을 이유가 없다.
 > 남의 DOM에 의존하면 계속 깨지고, 자체 UI여야 미리보기·버튼 삽입 UX를 마음대로 만들 수 있다.
