@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blogger AI 작성기</title>
+<link rel="stylesheet" href="app.css">
+<!-- Google 로그인(토큰 발급)용. 이 스크립트만 외부 의존성이다. -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<header class="top">
+  <h1>✦ Blogger AI 작성기</h1>
+  <div class="top-actions">
+    <span id="authChip" class="chip chip-off">Google 미연결</span>
+    <select id="blogSelect" title="게시할 블로그"><option value="">블로그 선택</option></select>
+    <label class="draft"><input type="checkbox" id="asDraft" checked> 초안으로</label>
+    <button id="publishBtn" class="primary">게시</button>
+    <button id="settingsBtn" title="설정">설정</button>
+  </div>
+</header>
+
+<p id="topStatus" class="topstatus"></p>
+
+<main>
+  <!-- ── 왼쪽: 생성 도구 ── -->
+  <section class="pane left">
+
+    <details open>
+      <summary>1. AI 글쓰기</summary>
+      <label>주제 키워드</label>
+      <textarea id="kw" rows="3" placeholder="키워드나 질문을 입력하세요"></textarea>
+      <div class="row">
+        <select id="docType"><option>유틸리티</option><option>리뷰</option><option>정보</option><option>뉴스</option></select>
+        <select id="lang"><option>한국어</option><option>English</option></select>
+      </div>
+      <button id="genText" class="primary">AI 콘텐츠 생성</button>
+      <p id="textStatus" class="status"></p>
+    </details>
+
+    <details open>
+      <summary>2. AI 썸네일</summary>
+      <label>썸네일 스타일</label>
+      <select id="thumbStyle">
+        <option>포스터 스타일</option><option>썸네일 스타일</option><option>미니멀</option><option>사진 스타일</option>
+      </select>
+      <p class="hint">위 "주제 키워드"가 이미지 주제로 사용됩니다.</p>
+      <button id="genImage" class="danger">AI 썸네일 생성</button>
+      <p id="imgStatus" class="status"></p>
+      <div id="thumbPreview"></div>
+      <div class="row hidden" id="thumbActions">
+        <button id="saveImage">이미지 저장</button>
+        <button id="insertImage" class="accent">업로드 후 본문에 삽입</button>
+      </div>
+    </details>
+
+    <details open>
+      <summary>3. 버튼 만들기</summary>
+      <label>버튼 텍스트</label>
+      <input id="btnText" type="text" placeholder="예) 자세히 보기">
+      <label>버튼 링크</label>
+      <input id="btnUrl" type="text" placeholder="https://example.com/...">
+      <label>버튼 색상</label>
+      <input id="btnColor" type="color" value="#2b6cb0">
+      <button id="insertButton" class="accent">본문 커서 위치에 삽입</button>
+      <p id="btnStatus" class="status"></p>
+    </details>
+
+  </section>
+
+  <!-- ── 오른쪽: 본문 편집 + 미리보기 ── -->
+  <section class="pane right">
+    <label>제목</label>
+    <input id="postTitle" type="text" placeholder="글 제목">
+
+    <div class="tabs">
+      <button class="tab active" data-view="html">본문 HTML</button>
+      <button class="tab" data-view="preview">미리보기</button>
+    </div>
+
+    <textarea id="postBody" spellcheck="false" placeholder="여기에 본문 HTML이 들어갑니다. 직접 수정해도 됩니다."></textarea>
+    <iframe id="preview" class="hidden" title="미리보기"></iframe>
+  </section>
+</main>
+
+<!-- ── 설정 ── -->
+<dialog id="settingsDlg">
+  <form method="dialog">
+    <h2>설정</h2>
+    <p class="hint">모든 값은 이 브라우저에만 저장됩니다(localStorage). 소스에는 들어가지 않습니다.</p>
+
+    <h3>Claude (글쓰기)</h3>
+    <label>Anthropic API 키</label>
+    <input id="sAnthropicKey" type="password" placeholder="sk-ant-...">
+    <label>모델</label>
+    <select id="sClaudeModel">
+      <option value="claude-sonnet-5">claude-sonnet-5 (기본)</option>
+      <option value="claude-haiku-4-5">claude-haiku-4-5 (빠름)</option>
+      <option value="claude-opus-5">claude-opus-5 (고품질)</option>
+    </select>
+    <button type="button" id="testClaude">키 테스트</button>
+
+    <h3>Gemini (썸네일)</h3>
+    <label>Gemini API 키</label>
+    <input id="sGeminiKey" type="password" placeholder="AIza...">
+
+    <h3>Google / Blogger (게시)</h3>
+    <label>OAuth 클라이언트 ID</label>
+    <input id="sGoogleClientId" type="text" placeholder="....apps.googleusercontent.com">
+    <p class="hint">Cloud Console에서 웹 애플리케이션 유형으로 만들고, 이 페이지 주소를 "승인된 JavaScript 원본"에 등록하세요.</p>
+
+    <h3>이미지 호스팅 (GitHub)</h3>
+    <label>GitHub 토큰 (contents 쓰기)</label>
+    <input id="sGhToken" type="password" placeholder="github_pat_...">
+    <div class="row">
+      <input id="sGhOwner" type="text" placeholder="owner">
+      <input id="sGhRepo" type="text" placeholder="repo">
+    </div>
+    <div class="row">
+      <input id="sGhBranch" type="text" placeholder="main">
+      <input id="sGhPathPrefix" type="text" placeholder="images">
+    </div>
+    <p class="hint">jsDelivr CDN은 공개 리포만 서빙합니다.</p>
+
+    <p id="settingsStatus" class="status"></p>
+    <menu>
+      <button value="cancel">닫기</button>
+      <button id="saveSettings" value="save" class="primary">저장</button>
+    </menu>
+  </form>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

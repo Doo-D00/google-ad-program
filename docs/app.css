@@ -1,0 +1,90 @@
+/* app.css — 빌드 도구 없이 쓰는 단일 스타일시트 */
+:root{
+  --bg:#f7f8fa; --panel:#fff; --line:#e2e8f0; --text:#1a202c; --muted:#718096;
+  --brand:#6b46c1; --brand-dark:#553c9a; --accent:#dd6b20; --danger:#e53e3e;
+  --ok:#2f855a; --warn:#b7791f; --err:#c53030;
+}
+*{box-sizing:border-box}
+/* 도구로 쓰는 화면이라 페이지 전체가 스크롤되지 않게 하고, 각 패널이 따로 스크롤되게 한다. */
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+  height:100vh;display:flex;flex-direction:column;overflow:hidden;
+}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:8px;padding:8px 14px}
+button:hover{background:#f1f5f9}
+button:disabled{opacity:.5;cursor:default}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:700}
+button.primary:hover{background:var(--brand-dark)}
+button.accent{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.danger{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600}
+input,select,textarea{
+  width:100%;font:inherit;color:var(--text);background:#fff;
+  border:1px solid #cbd5e0;border-radius:8px;padding:8px;
+}
+textarea{resize:vertical}
+label{display:block;margin:10px 0 4px;font-weight:600;color:#4a5568;font-size:13px}
+.hint{margin:6px 0 0;font-size:12px;color:var(--muted)}
+.hidden{display:none!important}
+.row{display:flex;gap:8px;margin-top:8px}
+.row>*{flex:1}
+
+/* 상단 바 */
+.top{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:10;flex-wrap:wrap;
+}
+.top h1{margin:0;font-size:16px}
+.top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.top-actions select{width:auto;min-width:150px}
+.draft{display:flex;align-items:center;gap:5px;margin:0;font-size:13px;white-space:nowrap}
+.draft input{width:auto}
+.chip{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.chip-off{background:#fed7d7;color:#9b2c2c}
+.chip-on{background:#c6f6d5;color:#22543d}
+.topstatus{margin:0;padding:0 18px;min-height:20px;font-size:13px}
+
+/* 본체 2단 */
+main{
+  flex:1;min-height:0;
+  display:grid;grid-template-columns:380px 1fr;gap:16px;padding:8px 18px 18px;
+}
+.pane{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;
+  height:100%;overflow:auto;
+}
+.right{display:flex;flex-direction:column;overflow:hidden}
+
+/* 좁은 화면에서는 그냥 세로로 쌓고 페이지 스크롤을 허용한다 */
+@media (max-width:900px){
+  body{height:auto;overflow:auto}
+  main{grid-template-columns:1fr}
+  .pane{height:auto;overflow:visible}
+}
+
+details{border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:12px}
+details:last-child{border-bottom:none;margin-bottom:0}
+summary{font-weight:700;cursor:pointer;padding:4px 0}
+details>button{width:100%;margin-top:12px}
+
+.status{min-height:18px;margin:8px 0 0;font-size:12px;white-space:pre-wrap}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}.loading{color:var(--brand)}
+
+#thumbPreview img{max-width:100%;border-radius:8px;margin-top:10px;border:1px solid var(--line)}
+
+/* 편집/미리보기 */
+.tabs{display:flex;gap:6px;margin:12px 0 8px}
+.tab{border-radius:8px 8px 0 0;font-size:13px;font-weight:600;color:var(--muted)}
+.tab.active{color:var(--brand);border-color:var(--brand);background:#faf5ff}
+#postBody{flex:1;min-height:200px;resize:none;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+#preview{flex:1;min-height:200px;width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+@media (max-width:900px){#postBody,#preview{min-height:420px}}
+
+/* 설정 대화상자 */
+dialog{border:none;border-radius:12px;padding:0;max-width:520px;width:92vw;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+dialog form{padding:20px}
+dialog h2{margin:0 0 6px;font-size:18px}
+dialog h3{margin:18px 0 0;font-size:14px;color:var(--brand)}
+dialog menu{display:flex;justify-content:flex-end;gap:8px;margin:18px 0 0;padding:0}
