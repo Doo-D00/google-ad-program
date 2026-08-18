@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Google Ad Program — Blogger AI 도구",
+  "version": "0.2.0",
+  "description": "Blogger 글쓰기 편집기에 AI 글쓰기(Claude) · AI 썸네일(Gemini) · 버튼/마크업 삽입 기능을 넣는 개인용 확장 프로그램.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://www.blogger.com/*",
+    "https://api.anthropic.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Blogger AI 도구",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "src/options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.blogger.com/blog/post/edit/*",
+        "https://www.blogger.com/blog/posts/*",
+        "https://www.blogger.com/u/*/blog/post/edit/*"
+      ],
+      "js": ["src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

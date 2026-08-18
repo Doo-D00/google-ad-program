@@ -1,0 +1,24 @@
+/* content.css — gap- 접두사로 Blogger 스타일과 충돌 방지 */
+.gap-fab{position:fixed;right:20px;bottom:20px;z-index:2147483000;background:#6b46c1;color:#fff;border:none;border-radius:24px;padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif}
+.gap-fab:hover{background:#553c9a}
+.gap-panel{position:fixed;right:20px;bottom:74px;z-index:2147483000;width:380px;max-height:80vh;overflow-y:auto;background:#fff;color:#1a202c;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;font-size:13px}
+.gap-hidden{display:none}
+.gap-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #edf2f7;font-weight:700;font-size:14px}
+.gap-close{background:transparent;border:none;font-size:15px;cursor:pointer;color:#718096}
+.gap-tabs{display:flex;border-bottom:1px solid #edf2f7}
+.gap-tab{flex:1;background:#f7fafc;border:none;padding:10px;font-size:13px;font-weight:600;color:#718096;cursor:pointer}
+.gap-tab.gap-active{background:#fff;color:#6b46c1;box-shadow:inset 0 -2px 0 #6b46c1}
+.gap-body{padding:12px 14px}
+.gap-label{display:block;margin:10px 0 4px;font-weight:600;color:#4a5568}
+.gap-panel select,.gap-panel textarea,.gap-panel input[type=text]{width:100%;box-sizing:border-box;border:1px solid #cbd5e0;border-radius:8px;padding:8px;font-size:13px;font-family:inherit;color:#1a202c;background:#fff}
+.gap-panel textarea{resize:vertical}
+.gap-primary{width:100%;margin-top:12px;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;background:#6b46c1;color:#fff}
+.gap-primary:hover{background:#553c9a}
+.gap-danger{background:#e53e3e}.gap-danger:hover{background:#c53030}
+.gap-row{display:flex;gap:8px;margin:10px 0}
+.gap-row button{flex:1;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;background:#edf2f7;color:#2d3748}
+.gap-insert{background:#dd6b20!important;color:#fff!important}
+.gap-status{min-height:18px;margin:6px 0;font-size:12px}
+.gap-ok{color:#2f855a}.gap-warn{color:#b7791f}.gap-error{color:#c53030}.gap-loading{color:#6b46c1}
+.gap-hint{margin:6px 0 0;font-size:11px;color:#a0aec0}
+.gt-img{max-width:100%;border-radius:8px;margin-top:8px;border:1px solid #e2e8f0}
