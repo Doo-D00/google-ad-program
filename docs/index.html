@@ -71,7 +71,10 @@
 
   <!-- ── 오른쪽: 본문 편집 + 미리보기 ── -->
   <section class="pane right">
-    <label>제목</label>
+    <div class="titlerow">
+      <label>제목</label>
+      <button id="newPost" class="tiny" title="제목과 본문을 비웁니다">새 글</button>
+    </div>
     <input id="postTitle" type="text" placeholder="글 제목">
 
     <div class="tabs">
@@ -80,7 +83,8 @@
     </div>
 
     <textarea id="postBody" spellcheck="false" placeholder="여기에 본문 HTML이 들어갑니다. 직접 수정해도 됩니다."></textarea>
-    <iframe id="preview" class="hidden" title="미리보기"></iframe>
+    <!-- 생성된 본문에 script 가 섞여도 실행되지 않도록 샌드박스로 막는다. -->
+    <iframe id="preview" class="hidden" title="미리보기" sandbox=""></iframe>
   </section>
 </main>
 

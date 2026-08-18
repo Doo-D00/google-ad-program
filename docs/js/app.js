@@ -197,8 +197,47 @@ function insertIntoBody(html) {
   renderPreview();
 }
 
+// ── 작성 중인 글 자동 저장 ──
+// 서버가 없으므로 탭을 닫거나 새로고침하면 생성한 글이 그냥 사라진다.
+// 제목/본문을 localStorage 에 계속 흘려 두고 다음에 열 때 되살린다.
+const DRAFT_KEY = "gap.draft.v1";
+let draftTimer = null;
+
+function saveDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    const title = $("postTitle").value, body = $("postBody").value;
+    // 빈 상태는 저장하지 않는다. 저장하면 앱을 새 탭에서 열자마자
+    // 다른 탭에서 쓰던 초안이 빈 값으로 덮여 사라진다.
+    // 비우는 것은 [새 글] 버튼으로만 한다.
+    if (!title && !body) return;
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, body, at: Date.now() })); } catch (_) {}
+  }, 500);
+}
+
+function restoreDraft() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
+    if (!d || (!d.title && !d.body)) return;
+    $("postTitle").value = d.title || "";
+    $("postBody").value = d.body || "";
+    const when = d.at ? new Date(d.at).toLocaleString() : "";
+    say($("topStatus"), `작성 중이던 글을 복원했습니다${when ? ` (${when})` : ""}. 새로 시작하려면 [새 글].`, "ok");
+  } catch (_) {}
+}
+
+$("newPost").addEventListener("click", () => {
+  if (($("postTitle").value || $("postBody").value) && !confirm("제목과 본문을 비웁니다. 계속할까요?")) return;
+  $("postTitle").value = "";
+  $("postBody").value = "";
+  try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+  renderPreview();
+  say($("topStatus"), "새 글을 시작합니다.", "ok");
+});
+
 let previewTimer = null;
 function renderPreview() {
+  saveDraft();
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
     const title = $("postTitle").value.trim();
@@ -296,6 +335,7 @@ $("publishBtn").addEventListener("click", async () => {
 
 // ────────────────────────── 시작 ──────────────────────────
 fillSettingsForm();
+restoreDraft();
 renderPreview();
 // 이미 동의한 적이 있으면 팝업 없이 조용히 연결을 시도한다(실패해도 조용히 넘어간다).
 window.addEventListener("load", () => {

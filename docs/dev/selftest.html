@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>selftest — 순수 로직 검증</title>
+<style>
+  body{font:14px/1.6 ui-monospace,Consolas,monospace;padding:20px;max-width:900px;margin:0 auto}
+  h1{font-size:18px}
+  .pass{color:#2f855a}.fail{color:#c53030;font-weight:700}
+  li{margin:2px 0;white-space:pre-wrap}
+  #summary{font-size:16px;font-weight:700;margin:12px 0}
+</style>
+</head>
+<body>
+<h1>selftest</h1>
+<p>키가 필요 없는 순수 로직(마크다운 변환, 이스케이프, 경로/URL 생성)만 검증합니다.
+API 호출은 여기서 확인할 수 없습니다.</p>
+<div id="summary">실행 중…</div>
+<ul id="out"></ul>
+
+<script type="module">
+import { mdToHtml, splitTitle, esc, escAttr } from "../js/markdown.js";
+import { buildPath, cdnUrl } from "../js/github.js";
+
+const out = document.getElementById("out");
+let pass = 0, fail = 0;
+
+function check(name, actual, expected) {
+  const ok = actual === expected;
+  ok ? pass++ : fail++;
+  const li = document.createElement("li");
+  li.className = ok ? "pass" : "fail";
+  li.textContent = (ok ? "PASS  " : "FAIL  ") + name +
+    (ok ? "" : `\n      기대: ${expected}\n      실제: ${actual}`);
+  out.appendChild(li);
+}
+
+function contains(name, haystack, needle) {
+  check(name, haystack.includes(needle) ? "포함" : `미포함 → ${haystack}`, "포함");
+}
+
+// ── 마크다운 → HTML ──
+check("## 는 h3 로", mdToHtml("## 소제목"), "<h3>소제목</h3>");
+check("### 는 h4 로", mdToHtml("### 소소제목"), "<h4>소소제목</h4>");
+check("# 는 h2 로(제목은 h1 이므로)", mdToHtml("# 큰제목"), "<h2>큰제목</h2>");
+check("문단", mdToHtml("그냥 한 줄"), "<p>그냥 한 줄</p>");
+check("굵게", mdToHtml("**굵게**"), "<p><b>굵게</b></p>");
+check("기울임", mdToHtml("*기울임*"), "<p><i>기울임</i></p>");
+check("인라인 코드", mdToHtml("`code`"), "<p><code>code</code></p>");
+check("구분선", mdToHtml("---"), "<hr />");
+check("순서없는 목록", mdToHtml("- 하나\n- 둘"), "<ul>\n<li>하나</li>\n<li>둘</li>\n</ul>");
+check("순서있는 목록", mdToHtml("1. 하나\n2. 둘"), "<ol>\n<li>하나</li>\n<li>둘</li>\n</ol>");
+check("코드펜스", mdToHtml("```\na < b\n```"), "<pre><code>a &lt; b</code></pre>");
+check("HTML 특수문자 이스케이프", mdToHtml("a < b & c"), "<p>a &lt; b &amp; c</p>");
+
+// 링크: URL 의 & 가 이중 이스케이프되면 안 된다(&amp;amp; 금지)
+const link = mdToHtml("[보기](https://e.com/?a=1&b=2)");
+contains("링크 href 유지", link, 'href="https://e.com/?a=1&amp;b=2"');
+check("링크 이중 이스케이프 없음", link.includes("&amp;amp;"), false);
+
+// 링크 URL 에 따옴표가 들어가도 속성이 깨지지 않아야 한다
+contains("링크 URL 안의 따옴표 차단", mdToHtml('[x](https://e.com/")'), "&quot;");
+
+// ── 제목 분리 ──
+const s1 = splitTitle("# 계란찜 만들기\n\n본문입니다.");
+check("첫 줄 제목 분리", s1.title, "계란찜 만들기");
+check("제목 제외한 본문", s1.body, "본문입니다.");
+const s2 = splitTitle("제목 없는 글");
+check("제목이 없으면 빈 문자열", s2.title, "");
+check("제목이 없으면 본문 그대로", s2.body, "제목 없는 글");
+
+// ── 이스케이프 ──
+check("esc 는 따옴표를 두지 않는다", esc('a"b'), 'a"b');
+check("escAttr 은 따옴표를 막는다", escAttr('a"b'), "a&quot;b");
+check("escAttr 은 홑따옴표도 막는다", escAttr("a'b"), "a&#39;b");
+check("escAttr 은 꺾쇠도 막는다", escAttr("<img>"), "&lt;img&gt;");
+
+// ── GitHub 경로 / CDN URL ──
+const p = buildPath({ prefix: "images", keyword: "계란찜 만드는법", mime: "image/png" });
+check("경로 prefix", p.startsWith("images/"), true);
+check("확장자", p.endsWith(".png"), true);
+check("jpeg 는 jpg 로", buildPath({ prefix: "i", keyword: "k", mime: "image/jpeg" }).endsWith(".jpg"), true);
+check("prefix 슬래시 정리", buildPath({ prefix: "/i/", keyword: "k", mime: "image/png" }).startsWith("i/"), true);
+check("CDN URL 형식",
+  cdnUrl({ owner: "o", repo: "r", branch: "b", path: "images/x.png" }),
+  "https://cdn.jsdelivr.net/gh/o/r@b/images/x.png");
+
+// ── 결과 ──
+const sum = document.getElementById("summary");
+sum.textContent = `${pass} PASS / ${fail} FAIL`;
+sum.className = fail ? "fail" : "pass";
+console.log(`[selftest] ${pass} pass, ${fail} fail`);
+</script>
+</body>
+</html>

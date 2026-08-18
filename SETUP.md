@@ -15,7 +15,15 @@
 | 로컬 | `http://localhost:8765` — `powershell -ExecutionPolicy Bypass -File dev-serve.ps1` |
 
 GitHub Pages 켜기: 리포 **Settings → Pages → Source: Deploy from a branch → `master` / `/docs`**.
-(무료 Pages는 공개 리포에서만 됩니다.)
+
+> ⚠ **이 리포는 현재 private 입니다.** 그래서 지금 상태로는 두 가지가 막힙니다.
+> - **Pages**: 무료 계정은 공개 리포에서만 됩니다(Pro/Team이면 private도 가능).
+> - **jsDelivr**: 공개 리포만 서빙합니다(4번 이미지 호스팅).
+>
+> 선택지:
+> 1. 이 리포를 **공개로 전환** — 소스에 키가 없으므로(모두 사용자 입력 → localStorage) 안전합니다.
+> 2. **로컬로만 사용** — `dev-serve.ps1` 로 충분히 다 됩니다. 이미지용으로 **별도 공개 리포**만 하나 만들면 됩니다.
+> 3. 앱과 이미지를 담을 **새 공개 리포**를 따로 만들고 이 리포는 private으로 둡니다.
 
 > `file://` 로 열면 안 됩니다. ES 모듈과 Google 로그인이 동작하지 않습니다.
 

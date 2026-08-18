@@ -88,3 +88,5 @@ dialog form{padding:20px}
 dialog h2{margin:0 0 6px;font-size:18px}
 dialog h3{margin:18px 0 0;font-size:14px;color:var(--brand)}
 dialog menu{display:flex;justify-content:flex-end;gap:8px;margin:18px 0 0;padding:0}
+.titlerow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+button.tiny{padding:3px 10px;font-size:12px;color:var(--muted)}

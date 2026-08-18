@@ -58,11 +58,21 @@ export async function ensureToken(clientId) {
   return await requestToken(clientId, { interactive: true });
 }
 
-async function apiFetch(path, init = {}) {
+async function apiFetch(path, init = {}, { retryAuth = true } = {}) {
   const res = await fetch(API + path, {
     ...init,
     headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json", ...(init.headers || {}) },
   });
+
+  // 토큰은 1시간짜리다. 글을 오래 쓰다 보면 게시 직전에 만료되기 쉬우므로
+  // 401 이면 조용히 한 번 갱신해서 재시도한다(사용자가 다시 쓰게 만들지 않는다).
+  if (res.status === 401 && retryAuth && clientIdUsed) {
+    try {
+      await requestToken(clientIdUsed, { interactive: true });
+      return await apiFetch(path, init, { retryAuth: false });
+    } catch (_) { /* 갱신 실패하면 아래 공통 오류 처리로 넘어간다 */ }
+  }
+
   if (!res.ok) {
     const detail = (await res.text()).slice(0, 400);
     const hint = {
