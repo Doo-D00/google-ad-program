@@ -125,6 +125,16 @@ contains("해당 자리만 바뀐다", replaced, "<BTN>");
 check("다른 자리는 그대로", replaced.includes("[버튼: 텍스트 | URL]"), true);
 check("플레이스홀더 유무", buttons.hasPlaceholder("없음"), false);
 
+// ── 버튼 자리가 없으면 코드로 보장 ──
+const noSlots = "<h3>A</h3><p>a</p><h3>B</h3><p>b</p><h3>C</h3><p>c</p><h3>D</h3><p>d</p>";
+const ensured = buttons.ensureButtonSlots(noSlots);
+check("자리가 없으면 2개를 넣는다", buttons.findPlaceholders(ensured).length, 2);
+check("첫 소제목 앞에는 넣지 않는다", ensured.indexOf("[버튼") > ensured.indexOf("<h3>A</h3>"), true);
+check("이미 있으면 건드리지 않는다",
+  buttons.ensureButtonSlots("<p>[버튼: 텍스트 | URL]</p>"), "<p>[버튼: 텍스트 | URL]</p>");
+check("소제목이 적어도 2개를 채운다",
+  buttons.findPlaceholders(buttons.ensureButtonSlots("<p>글만 있음</p>")).length, 2);
+
 // ── 제휴 고지 ──
 check("고지 없음을 안다", buttons.hasNotice("<p>본문</p>"), false);
 const withNotice = buttons.appendNotice("<p>본문</p>");

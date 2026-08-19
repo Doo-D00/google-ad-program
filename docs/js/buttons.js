@@ -4,6 +4,7 @@
 // style 속성에 직접 박는다(CLAUDE.md 5장). class 로 빼지 말 것 — 버튼이 맨 링크로 보인다.
 
 import { escAttr, esc } from "./markdown.js";
+import { BUTTON_PLACEHOLDER } from "./gemini.js";
 
 // 제휴/광고 링크는 구글 정책상 sponsored 표기 의무다. nofollow 도 같이 붙인다.
 const REL = "nofollow sponsored noopener";
@@ -52,6 +53,28 @@ export function findPlaceholders(body) {
 
 export function hasPlaceholder(body) {
   return findPlaceholders(body).length > 0;
+}
+
+// 프롬프트로 시켜도 모델이 버튼 자리를 빼먹을 때가 있다. 수익화가 여기 달려 있으므로
+// 하나도 없으면 코드로 넣어 준다. 자리는 "정보를 준 뒤"여야 하니 소제목 바로 앞에 둔다
+// (앞 절의 내용이 끝나는 지점이다). 소제목이 모자라면 글 끝에 붙인다.
+export function ensureButtonSlots(html, count = 2) {
+  const s = String(html || "");
+  if (findPlaceholders(s).length) return s;
+
+  const heads = [...s.matchAll(/<h[2-4]\b/gi)].map((m) => m.index);
+  const slot = `\n<p>${BUTTON_PLACEHOLDER}</p>\n`;
+
+  // 2번째와 4번째 소제목 앞 — 첫 소제목 바로 앞은 정보가 없는 자리라 피한다.
+  const targets = [heads[1], heads[3]].filter((i) => i !== undefined).slice(0, count);
+
+  // 뒤에서부터 넣어야 앞쪽 인덱스가 밀리지 않는다.
+  let out = s;
+  for (const i of [...targets].reverse()) out = out.slice(0, i) + slot + out.slice(i);
+
+  // 넣을 자리가 모자라면 나머지는 글 끝에.
+  for (let n = targets.length; n < count; n++) out += slot;
+  return out;
 }
 
 // 첫 번째로 나오는 플레이스홀더 하나를 버튼 HTML 로 바꾼다.

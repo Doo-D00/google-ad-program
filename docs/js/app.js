@@ -130,7 +130,8 @@ $("genText").addEventListener("click", async () => {
     lastMarkdown = text;
     const { title, body } = splitTitle(text);
     if (title) $("postTitle").value = title;
-    setBody(mdToHtml(body || text));
+    // 모델이 버튼 자리를 빼먹으면 코드로 넣어 준다.
+    setBody(buttons.ensureButtonSlots(mdToHtml(body || text)));
 
     const note = fellBack ? "\n(고른 AI 가 붐벼서 다른 AI 로 만들었습니다)" : "";
     say($("textStatus"),
