@@ -42,17 +42,20 @@
     </details>
 
     <details open>
-      <summary>2. 링크 버튼</summary>
-      <div id="phList"></div>
-      <hr>
+      <summary>2. 링크 버튼 <span id="btnCount" class="badge"></span></summary>
+
+      <p class="hint"><b>넣고 싶은 위치를 글에서 한 번 클릭</b>한 뒤 아래를 채우고 넣으세요.
+        <b>개수 제한은 없습니다.</b> 넣을 때마다 그 아래에 차곡차곡 들어갑니다.</p>
       <label>버튼 문구</label>
       <input id="btnText" type="text" placeholder="예) 사업계획서 양식 받기">
       <label>링크 주소</label>
       <input id="btnUrl" type="text" placeholder="https://...">
-      <button id="insertButton" class="accent">글에서 클릭한 자리에 넣기</button>
+      <button id="insertButton" class="accent">이 자리에 버튼 넣기</button>
+      <button id="addSlot" class="ghost">빈 버튼 자리만 만들기</button>
       <p id="btnStatus" class="status"></p>
-      <p class="hint">개수 제한은 없습니다. 글에서 넣고 싶은 위치를 한 번 클릭한 뒤 눌러 주세요.
-        "제휴 링크 포함" 안내 문구는 자동으로 붙습니다.</p>
+
+      <div id="phList"></div>
+      <p class="hint">"제휴 링크 포함" 안내 문구는 글 끝에 자동으로 붙습니다.</p>
     </details>
 
     <details open>

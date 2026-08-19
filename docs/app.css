@@ -165,3 +165,9 @@ label.check input{width:auto;margin:0}
 .thumbbox img{max-width:100%;border-radius:8px}
 
 details hr{border:none;border-top:1px solid var(--line);margin:14px 0}
+
+/* 버튼 개수 배지 */
+.badge{font-size:11px;font-weight:600;color:var(--brand);background:#faf5ff;
+  border:1px solid #e9d8fd;border-radius:99px;padding:1px 8px;margin-left:6px;vertical-align:middle}
+button.ghost{background:#fff;color:var(--muted);font-weight:600;margin-top:6px}
+button.ghost:hover{color:var(--brand);border-color:var(--brand)}

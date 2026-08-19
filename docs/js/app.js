@@ -171,17 +171,23 @@ $("genText").addEventListener("click", async () => {
 // ────────────────────────── 2. 링크 버튼 ──────────────────────────
 // 글에 남아 있는 버튼 자리마다 입력칸을 만들어 준다. 개수 제한은 없다.
 function renderPlaceholders() {
-  const found = buttons.findPlaceholders(getBody());
+  const body = getBody();
+  const found = buttons.findPlaceholders(body);
   const box = $("phList");
 
+  // 지금 글에 버튼이 몇 개 들어가 있는지 항상 보이게 한다.
+  const n = buttons.countButtons(body).total;
+  $("btnCount").textContent = n ? `${n}개 들어감` : "";
+
   if (!found.length) {
-    box.innerHTML = `<p class="hint">비어 있는 버튼 자리가 없습니다. 아래에서 원하는 위치에 직접 넣으세요.</p>`;
+    box.innerHTML = "";
     return;
   }
 
-  box.innerHTML = found.map((p, i) => `
+  box.innerHTML = `<p class="hint">아직 비어 있는 자리 ${found.length}개 — 여기를 채우면 그 자리에 들어갑니다.</p>` +
+    found.map((p, i) => `
     <div class="ph" data-i="${i}">
-      <label>비어 있는 버튼 자리 ${i + 1}</label>
+      <label>빈 자리 ${i + 1}</label>
       <input class="ph-text" type="text" placeholder="버튼 문구" value="${escAttr(p.text)}">
       <input class="ph-url" type="text" placeholder="https://..." value="${escAttr(p.url)}">
       <button type="button" class="ph-apply accent">여기에 넣기</button>
@@ -208,7 +214,8 @@ function applyPlaceholder(i) {
   let next = buttons.replaceAt(current, target.index, target.raw, buttons.buttonHtml({ text, url }));
   next = buttons.appendNotice(next);
   setBody(next);
-  say($("btnStatus"), "버튼을 넣었습니다.", "ok");
+  const n = buttons.countButtons(getBody()).total;
+  say($("btnStatus"), `${n}번째 버튼을 넣었습니다.`, "ok");
 }
 
 $("insertButton").addEventListener("click", () => {
@@ -216,11 +223,23 @@ $("insertButton").addEventListener("click", () => {
   const url = $("btnUrl").value.trim();
   if (!text || !url) return say($("btnStatus"), "버튼 문구와 링크 주소를 모두 넣어 주세요.", "warn");
 
-  insertAtCursor(buttons.buttonHtml({ text, url }));
-  setBody(buttons.appendNotice(getBody()));
+  const node = insertBlockAtCursor(buttons.buttonHtml({ text, url }));
+  ensureNoticeNode();
+  touchBody();
+  node?.scrollIntoView({ block: "center", behavior: "smooth" });
+
   $("btnText").value = "";
   $("btnUrl").value = "";
-  say($("btnStatus"), "버튼을 넣었습니다. 더 넣으셔도 됩니다.", "ok");
+  const n = buttons.countButtons(getBody()).total;
+  say($("btnStatus"), `${n}번째 버튼을 넣었습니다. 계속 넣으셔도 됩니다.`, "ok");
+});
+
+// 빈 버튼 자리를 원하는 위치에 하나 더 만든다. 개수 제한은 없다.
+$("addSlot").addEventListener("click", () => {
+  const node = insertBlockAtCursor(`<p>${gemini.BUTTON_PLACEHOLDER}</p>`);
+  touchBody();
+  node?.scrollIntoView({ block: "center", behavior: "smooth" });
+  say($("btnStatus"), "버튼 자리를 하나 더 만들었습니다. 위에서 문구와 주소를 채우세요.", "ok");
 });
 
 // ────────────────────────── 3. 올리기 전 확인 ──────────────────────────
@@ -389,23 +408,58 @@ $("saveImage").addEventListener("click", () => {
 });
 
 // ────────────────────────── 글 편집 ──────────────────────────
-// 커서 자리에 끼워 넣는다. 커서가 글 안에 없으면 맨 끝에 붙인다.
-function insertAtCursor(html) {
+// 글 안에서 마지막으로 커서가 있던 문단을 기억해 둔다.
+// 버튼 문구 칸을 클릭하는 순간 글의 커서가 풀리기 때문에, 기억해 두지 않으면
+// 넣을 위치를 잃고 전부 글 끝에 쌓인다.
+let lastBlock = null;
+
+function currentBlock() {
   const el = bodyEl();
-  el.focus();
   const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  let n = sel.getRangeAt(0).startContainer;
+  if (!el.contains(n)) return null;
+  // 편집기의 바로 아래 자식(= 문단 단위)까지 거슬러 올라간다.
+  while (n && n.parentNode !== el) n = n.parentNode;
+  return n && n !== el ? n : null;
+}
 
-  if (!sel || !sel.rangeCount || !el.contains(sel.anchorNode)) {
-    el.innerHTML = el.innerHTML + html;
-    afterBodyChange();
-    return;
-  }
+function rememberBlock() {
+  const b = currentBlock();
+  if (b) lastBlock = b;
+}
+["keyup", "mouseup", "input"].forEach((ev) => bodyEl().addEventListener(ev, rememberBlock));
 
-  const range = sel.getRangeAt(0);
-  range.deleteContents();
-  range.insertNode(range.createContextualFragment(html));
-  sel.removeAllRanges();
+// 버튼처럼 덩어리로 된 것은 문단 "사이"에 넣는다.
+// 문단 안에 끼워 넣으면 <p> 안에 <div> 가 들어가 문단이 쪼개진다.
+function insertBlockAtCursor(html) {
+  const el = bodyEl();
+  const frag = document.createRange().createContextualFragment(html);
+  const nodes = [...frag.childNodes];
+
+  const at = currentBlock() || (el.contains(lastBlock) ? lastBlock : null);
+  if (at) at.after(frag);
+  else el.appendChild(frag);
+
+  // 다음 버튼은 이 버튼 뒤에 오도록 위치를 옮겨 둔다. 연속으로 넣기 편하다.
+  lastBlock = nodes[nodes.length - 1] || lastBlock;
+  return nodes[0] || null;
+}
+
+// 화면을 통째로 다시 그리지 않고 필요한 것만 갱신한다.
+// 통째로 다시 그리면 커서와 기억해 둔 위치가 날아가 연속 삽입이 안 된다.
+function touchBody() {
+  bodyEl().querySelectorAll("mark.blank").forEach((m) => {
+    const t = m.textContent.trim();
+    if (!gemini.BLANKS.includes(t) && !/^\[버튼\s*:[^\]]*\]$/.test(t)) m.replaceWith(...m.childNodes);
+  });
   afterBodyChange();
+}
+
+// 제휴 고지를 글 끝에 붙인다. 이미 있으면 그대로 둔다(다시 그리지 않는다).
+function ensureNoticeNode() {
+  if (buttons.hasNotice(bodyEl().innerHTML)) return;
+  bodyEl().appendChild(document.createRange().createContextualFragment(buttons.noticeHtml()));
 }
 
 // 노란 빈칸을 클릭하면 그 자리를 통째로 선택해 준다. 바로 타이핑하면 덮어써진다.
