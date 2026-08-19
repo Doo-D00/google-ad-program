@@ -98,10 +98,11 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 (GitHub 는 리포 URL 은 리다이렉트해주지만 Pages 주소는 안 해준다). 리모트 URL, 커밋 이메일,
 문서, `store.js` 의 `ghOwner` 기본값은 갱신 완료. 브라우저에 옛 owner 가 저장돼 있으면
 `store.js` 의 `migrate()` 가 읽을 때 한 번 갈아끼운다.
-**남은 사람 몫(2026-08-19 확인)**: OAuth 클라이언트는 애초에 만들어진 적이 없다 — "원본을 고친다"가
-아니라 `SETUP.md` 3번을 처음부터 하는 것이다. Blogger API v3 는 프로젝트 `pivotal-bonbon-471106-n0`
-에 사용 설정해 두었다. 동의 화면 생성은 콘솔의 "만들기"가 응답하지 않아 끝내지 못했다(재시도 필요).
-원본에는 `https://dev-doo.github.io` 와 `http://localhost:8765` 두 개를 넣는다.
+**Cloud Console 설정 완료(2026-08-19)**: OAuth 클라이언트는 이름 변경으로 깨진 게 아니라 애초에
+없었다. 이번에 프로젝트 `pivotal-bonbon-471106-n0` 에 Blogger API v3 사용 설정, 동의 화면(외부/
+테스트 중, 테스트 사용자 `doosw02@gmail.com`), 웹 클라이언트(원본 `https://dev-doo.github.io`,
+`http://localhost:8765`)까지 만들었고 클라이언트 ID 는 Pages 주소의 localStorage 에 저장했다.
+**W3 는 이제 실제 로그인 클릭만 남았다** — 여기서 Blogger CORS 통과 여부가 처음 확인된다.
 
 **브라우저에서 실제로 검증한 것**
 - 화면 로딩(콘솔 에러 없음), 커서 위치 버튼 삽입, 미리보기 렌더
