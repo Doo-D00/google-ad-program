@@ -48,12 +48,15 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
   max_tokens 를 소모해서, 작게 잡으면 본문이 비거나 잘린다.
 - `output_config.effort` 는 sonnet-5/opus-5 만 지원. haiku-4-5 에 주면 400.
 
-### Gemini (이미지) — 모델 ID 확인 필요 ⚠
+### Gemini (이미지)
 - POST `https://generativelanguage.googleapis.com/v1beta/models/<MODEL>:generateContent`
 - 헤더 `x-goog-api-key`, 바디 `{"contents":[{"parts":[{"text":"..."}]}],"generationConfig":{"responseModalities":["IMAGE"]}}`
 - 응답: `candidates[0].content.parts[].inlineData.data` (base64) + `inlineData.mimeType`
 - **`IMAGE_MODEL` 은 자주 갱신된다.** 실패하면 문서에서 최신 ID 확인 후 `docs/js/gemini.js` 갱신.
   https://ai.google.dev/gemini-api/docs/image-generation
+- 2026-08-19 기준 현행은 Gemini 3 계열이다. `gemini-3.1-flash-image`(기본값) /
+  `gemini-3.1-flash-lite-image`(싸고 빠름) / `gemini-3-pro-image`(고품질).
+  `gemini-2.5-flash-image` 는 legacy 로 내려갔다.
 
 ### Blogger (게시)
 - 발행: POST `https://www.googleapis.com/blogger/v3/blogs/{blogId}/posts?isDraft=true|false`
@@ -68,9 +71,9 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 ## 5. 빌드 단계
 - [x] **W0. 뼈대** — 화면, 설정 저장, 커서 삽입, 미리보기. (버튼 삽입/미리보기는 실제 브라우저 검증 완료)
 - [ ] **W1. 글쓰기** — 실제 Claude 키로 생성 확인. 프롬프트/말투 다듬기.
-- [ ] **W2. 썸네일** — Gemini 모델 ID 최신화 → 생성 → GitHub 업로드 → 본문 삽입 확인.
-- [ ] **W3. 게시** — Cloud Console 설정(SETUP.md) → 로그인 → 초안 게시 → 공개 발행 확인.
-      **브라우저에서 Blogger API 호출 시 CORS 가 실제로 통과하는지 여기서 처음 확인된다.**
+- [ ] **W2. 썸네일** — ~~Gemini 모델 ID 최신화~~(완료) → 생성 → GitHub 업로드 → 본문 삽입 확인.
+- [ ] **W3. 게시** — ~~Cloud Console 설정(SETUP.md)~~(완료) → 로그인 → 초안 게시 → 공개 발행 확인.
+      브라우저 CORS 는 통과 확인됨(8번 참고). 남은 건 실제 토큰으로 되는지다.
 - [ ] **W4. 다듬기** — 라벨(태그) 입력, 이미지 여러 장, 초안 불러와 수정, 히스토리 등.
 
 ## 6. 알려진 함정 / 주의
@@ -114,13 +117,18 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 W1(Claude 생성) → W2(Gemini 썸네일 + GitHub 업로드) → W3(Blogger 게시) 순으로 확인한다.
 사용자가 `SETUP.md` 대로 키를 넣은 뒤, 화면에 뜬 오류 메시지를 기준으로 잡는다.
 
-터질 가능성이 높은 순서와 대응:
-1. **W2 Gemini 모델 ID** — `gemini-2.5-flash-image` 는 낡았을 수 있다.
-   "이미지 응답을 찾지 못했습니다" 나 404 면 최신 ID 확인 후 `docs/js/gemini.js` 갱신.
-2. **W3 Blogger CORS** — 브라우저에서 googleapis.com/blogger 직접 호출이 실제로 되는지
-   여기서 처음 확인된다. 막히면 구조 변경이 필요하다(프록시 또는 확장 회귀).
-3. **W3 OAuth 403** — Blogger API 사용 설정 누락, 또는 동의 화면 테스트 사용자 미등록.
-4. **W2 GitHub 404** — 토큰 권한 부족일 때도 404 가 난다(리포 이름 문제로 오인하기 쉽다).
+**CORS 는 2026-08-19 에 네 API 모두 통과 확인했다(키 없이).** Pages 오리진에서 가짜 자격증명으로
+호출해 401/403 응답 본문을 읽을 수 있는지로 확인했다 — Blogger 401, Anthropic 401, Gemini 400,
+GitHub 401. **즉 프록시나 확장 회귀 같은 구조 변경은 필요 없다.** 같은 확인이 다시 필요하면
+브라우저 콘솔에서 잘못된 키로 한 번 호출해 보면 된다(네트워크 오류가 아니라 상태 코드가 읽히면 통과).
+
+남은 위험과 대응:
+1. **W2 Gemini 모델 ID** — 2026-08-19 에 `gemini-3.1-flash-image` 로 갱신했다(2.5 는 legacy).
+   그래도 "이미지 응답을 찾지 못했습니다" 나 404 면 문서에서 최신 ID 확인 후 `docs/js/gemini.js` 갱신.
+2. **W3 OAuth 403** — 동의 화면 테스트 사용자 미등록, 또는 이 계정이 해당 블로그 관리자가 아닐 때.
+   (Blogger API 사용 설정과 테스트 사용자 등록은 2026-08-19 에 끝냈다.)
+3. **W2 GitHub 404** — 토큰 권한 부족일 때도 404 가 난다(리포 이름 문제로 오인하기 쉽다).
+   계정 이름을 바꿨으므로 예전 토큰이 있으면 리포 접근 범위를 다시 확인할 것.
 
 ## 9. 레거시: 크롬 확장 (`src/`, `manifest.json`)
 Blogger 편집기에 패널을 주입하던 v0.2~P2 버전. 웹앱으로 전환하면서 사용 중단했다.
