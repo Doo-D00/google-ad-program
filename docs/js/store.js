@@ -10,6 +10,7 @@ const KEY = "gap.settings.v1";
 const DEFAULTS = {
   geminiKey: "",
   geminiModel: "gemini-3.1-flash-lite",
+  blogUrl: "",
 };
 
 // 예전 버전에서 넘어올 때 지우는 항목들.

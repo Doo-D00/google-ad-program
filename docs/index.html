@@ -10,45 +10,49 @@
 
 <header class="top">
   <h1>✦ 티스토리 글 도우미</h1>
+  <nav class="maintabs">
+    <button class="mtab active" data-panel="write">글쓰기</button>
+    <button class="mtab" data-panel="thumb">썸네일</button>
+  </nav>
   <div class="top-actions">
-    <button id="copyHtml" class="primary" title="복사해서 티스토리에 붙여넣으세요">글 복사하기</button>
-    <button id="saveHtml">파일로 보관</button>
+    <button id="publishBtn" class="primary" title="티스토리 글쓰기 창을 열고 글을 복사해 둡니다">게시하기</button>
     <button id="settingsBtn" title="설정">설정</button>
   </div>
 </header>
 
 <p id="topStatus" class="topstatus"></p>
 
-<main>
-  <!-- ── 왼쪽: 도구 ── -->
+<!-- ══════════════ 글쓰기 ══════════════ -->
+<main id="panel-write">
   <section class="pane left">
 
     <details open>
-      <summary>1. 글 초안 만들기</summary>
+      <summary>1. 글 만들기</summary>
       <label>어떤 글을 쓸까요?</label>
       <textarea id="kw" rows="3" placeholder="예) 초기창업패키지 작성방법"></textarea>
       <div class="row">
         <select id="topic" title="분야에 따라 말투가 달라집니다"></select>
         <select id="lang"><option>한국어</option><option>English</option></select>
       </div>
-      <button id="genText" class="primary">초안 만들기</button>
+      <button id="genText" class="primary">글 만들기</button>
       <p id="textStatus" class="status"></p>
-      <p class="hint">일부러 <b>빈칸</b>을 남깁니다. 노란 칸을 눌러 직접 써 넣으세요.
-        내 이야기가 들어가야 저품질을 피합니다.</p>
+      <label class="check"><input type="checkbox" id="blankMode"> 내가 채울 빈칸을 남기기</label>
+      <p class="hint">체크하면 <b>[내 경험]</b> 같은 자리를 일부러 비워 둡니다.
+        내 이야기가 들어간 글이 저품질을 피하는 데 유리합니다.</p>
     </details>
 
     <details open>
-      <summary>2. 링크 버튼 넣기</summary>
+      <summary>2. 링크 버튼</summary>
       <div id="phList"></div>
+      <hr>
+      <label>버튼 문구</label>
+      <input id="btnText" type="text" placeholder="예) 사업계획서 양식 받기">
+      <label>링크 주소</label>
+      <input id="btnUrl" type="text" placeholder="https://...">
+      <button id="insertButton" class="accent">글에서 클릭한 자리에 넣기</button>
       <p id="btnStatus" class="status"></p>
-      <details class="sub">
-        <summary>원하는 위치에 직접 넣기</summary>
-        <p class="hint">글에서 버튼을 넣을 자리를 클릭한 뒤 아래를 채우세요.</p>
-        <input id="btnText" type="text" placeholder="버튼에 쓸 문구">
-        <input id="btnUrl" type="text" placeholder="https://... (링크 주소)">
-        <button id="insertButton" class="accent">이 자리에 버튼 넣기</button>
-      </details>
-      <p class="hint">버튼을 넣으면 "제휴 링크 포함" 안내 문구가 글 끝에 자동으로 붙습니다.</p>
+      <p class="hint">개수 제한은 없습니다. 글에서 넣고 싶은 위치를 한 번 클릭한 뒤 눌러 주세요.
+        "제휴 링크 포함" 안내 문구는 자동으로 붙습니다.</p>
     </details>
 
     <details open>
@@ -59,13 +63,17 @@
 
   </section>
 
-  <!-- ── 오른쪽: 글 ── -->
   <section class="pane right">
     <div class="titlerow">
       <label>제목</label>
       <button id="newPost" class="tiny" title="제목과 글을 비웁니다">새로 쓰기</button>
     </div>
     <input id="postTitle" type="text" placeholder="글 제목">
+
+    <div class="tabs">
+      <button class="tab active" data-view="edit">글 쓰기</button>
+      <button class="tab" data-view="preview">미리보기</button>
+    </div>
 
     <div class="toolbar" id="toolbar">
       <button type="button" data-cmd="bold" title="굵게"><b>가</b></button>
@@ -78,15 +86,34 @@
     </div>
 
     <div id="postBody" class="editor" contenteditable="true" spellcheck="false"
-         data-placeholder="왼쪽에서 [초안 만들기]를 누르면 여기에 글이 들어옵니다. 여기서 바로 고쳐 쓰시면 됩니다."></div>
+         data-placeholder="왼쪽에서 [글 만들기]를 누르면 여기에 글이 들어옵니다. 여기서 바로 고쳐 쓰시면 됩니다."></div>
+    <iframe id="preview" class="hidden" title="미리보기" sandbox=""></iframe>
+  </section>
+</main>
 
-    <details class="sub advanced">
-      <summary>붙여넣기가 잘 안 될 때</summary>
-      <p class="hint">티스토리가 버튼 모양을 지워버리면, 아래 버튼으로 복사한 뒤
-        티스토리 글쓰기에서 <b>기본모드 → HTML</b> 로 바꾸고 붙여넣으세요.</p>
-      <button type="button" id="copyRaw">HTML로 복사하기</button>
-      <textarea id="htmlView" rows="8" spellcheck="false" readonly></textarea>
+<!-- ══════════════ 썸네일 ══════════════ -->
+<main id="panel-thumb" class="hidden">
+  <section class="pane left">
+    <details open>
+      <summary>썸네일 만들기</summary>
+      <label>어떤 그림을 만들까요?</label>
+      <textarea id="thumbKw" rows="3" placeholder="예) 초기창업패키지 사업계획서"></textarea>
+      <label>그림 풍</label>
+      <select id="thumbStyle"></select>
+      <button id="genImage" class="primary">썸네일 만들기</button>
+      <p id="imgStatus" class="status"></p>
+      <p class="hint">만들어진 그림을 내려받아 티스토리 글쓰기에서 <b>대표 이미지</b>로 올리시면 됩니다.</p>
     </details>
+  </section>
+
+  <section class="pane right">
+    <div class="titlerow">
+      <label>미리보기</label>
+      <button id="saveImage" class="tiny hidden">이미지 내려받기</button>
+    </div>
+    <div id="thumbPreview" class="thumbbox">
+      <p class="hint">아직 만든 그림이 없습니다.</p>
+    </div>
   </section>
 </main>
 
@@ -96,13 +123,18 @@
     <h2>설정</h2>
     <p class="hint">모든 값은 이 브라우저에만 저장됩니다. 다른 사람에게 보이지 않습니다.</p>
 
-    <h3>Gemini (글 만들기)</h3>
+    <h3>Gemini</h3>
     <label>Gemini API 키</label>
     <input id="sGeminiKey" type="password" placeholder="AIza...">
     <label>사용할 AI</label>
     <select id="sGeminiModel"></select>
     <button type="button" id="testGemini">키 확인</button>
     <p class="hint">aistudio.google.com/app/apikey 에서 무료로 발급합니다.</p>
+
+    <h3>티스토리</h3>
+    <label>내 블로그 주소</label>
+    <input id="sBlogUrl" type="text" placeholder="myblog.tistory.com">
+    <p class="hint">[게시하기]를 누르면 이 블로그의 글쓰기 창이 열립니다.</p>
 
     <p id="settingsStatus" class="status"></p>
     <menu>

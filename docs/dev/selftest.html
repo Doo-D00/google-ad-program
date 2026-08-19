@@ -20,7 +20,7 @@ API 호출은 여기서 확인할 수 없습니다.</p>
 
 <script type="module">
 import { mdToHtml, splitTitle, esc, escAttr } from "../js/markdown.js";
-import { TEXT_MODELS, TEXT_MODEL_DEFAULT, TOPIC_TONES, BLANKS, BUTTON_PLACEHOLDER, isPlanQuota, buildPrompt } from "../js/gemini.js";
+import { TEXT_MODELS, TEXT_MODEL_DEFAULT, TOPIC_TONES, THUMB_STYLES, BLANKS, BUTTON_PLACEHOLDER, isPlanQuota, buildPrompt } from "../js/gemini.js";
 import * as buttons from "../js/buttons.js";
 import * as checks from "../js/checks.js";
 import { markBlanks, unmarkBlanks } from "../js/editor.js";
@@ -83,14 +83,37 @@ check("기본 모델이 목록에 있다", TEXT_MODELS.some((m) => m.id === TEXT
 check("모델 항목은 id/label 을 갖는다", TEXT_MODELS.every((m) => !!m.id && !!m.label), true);
 check("주제 분야는 4종", TOPIC_TONES.length, 4);
 
-// 프롬프트에서 빈칸 규칙이 빠지면 도구의 존재 의미가 없어진다(CLAUDE.md 2장).
-const P = buildPrompt({ keyword: "초기창업패키지 작성방법", topic: "창업·정보", lang: "한국어" });
-for (const b of BLANKS) contains(`프롬프트에 빈칸 ${b} 지시`, P.system, b);
-contains("프롬프트에 버튼 플레이스홀더", P.system, BUTTON_PLACEHOLDER);
-contains("프롬프트에 완성 금지", P.system, "완성하지 마세요");
-contains("프롬프트에 지어내기 금지", P.system, "지어내지 마세요");
-contains("프롬프트에 1,000자 기준", P.system, "1,000자");
-contains("주제 분야별 말투 반영", P.system, "실용");
+check("썸네일 그림풍 3종", THUMB_STYLES.map((s) => s.id).join(","), "실사,그림,애니메이션");
+
+// 빈칸 모드에서는 빈칸 지시가 반드시 들어가야 한다.
+const PB = buildPrompt({ keyword: "초기창업패키지", topic: "창업·정보", lang: "한국어", mode: "blanks" });
+for (const b of BLANKS) contains(`빈칸 모드에 ${b} 지시`, PB.system, b);
+contains("빈칸 모드는 완성을 막는다", PB.system, "완성하지 마세요");
+
+// 완성본 모드에서는 채우라는 표시를 남기면 안 된다.
+const PC = buildPrompt({ keyword: "초기창업패키지", topic: "창업·정보", lang: "한국어", mode: "complete" });
+contains("완성본 모드는 완성을 시킨다", PC.system, "완성된 글");
+contains("완성본 모드는 대괄호를 막는다", PC.system, "대괄호");
+check("완성본 모드에는 빈칸 지시가 없다", PC.system.includes("[내 경험]"), false);
+contains("기본은 완성본", buildPrompt({ keyword: "k", topic: "생활", lang: "한국어" }).system, "완성된 글");
+
+// 두 모드 모두 공통 규칙은 유지된다.
+for (const P of [PB, PC]) {
+  contains("버튼 자리 지시", P.system, BUTTON_PLACEHOLDER);
+  contains("지어내기 금지", P.system, "지어내지 마세요");
+  contains("1,000자 기준", P.system, "1,000자");
+}
+contains("주제 분야별 말투 반영", PC.system, "실용");
+
+// ── 확인 항목이 "무엇이" 남았는지까지 알려준다 ──
+const bd = checks.blankDetail("<p>[내 경험] [내 경험] [최신 확인] [버튼: 텍스트 | URL]</p>");
+check("남은 개수 합계", bd.total, 4);
+contains("어떤 빈칸인지 이름을 준다", bd.labels.join(" "), "[내 경험] 2개");
+contains("버튼 자리도 알려준다", bd.labels.join(" "), "버튼 자리 1개");
+check("다 채우면 빈 목록", checks.blankDetail("<p>다 썼다</p>").labels.length, 0);
+const helpful = checks.runChecks("<p>[내 경험]</p>").list.find((c) => c.key === "blanks");
+check("걸린 항목에는 안내가 붙는다", helpful.help.length > 0, true);
+contains("남은 것을 이름으로 보여준다", helpful.detail, "[내 경험]");
 
 // ── 429 구분 ──
 check("요금제 한도형 429 를 알아본다",

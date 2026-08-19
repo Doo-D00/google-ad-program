@@ -138,3 +138,30 @@ details.sub{margin-top:10px}
 details.sub>summary{font-size:12px;font-weight:600;color:var(--muted)}
 details.advanced{margin-top:10px}
 #htmlView{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--muted)}
+
+/* 위쪽 탭 (글쓰기 / 썸네일) */
+.maintabs{display:flex;gap:4px;margin-left:14px}
+.mtab{padding:7px 18px;font-size:14px;font-weight:700;color:var(--muted);background:transparent;border-color:transparent}
+.mtab:hover{color:var(--brand)}
+.mtab.active{color:var(--brand);background:#faf5ff;border-color:var(--brand)}
+
+/* 글 쓰기 / 미리보기 탭 */
+.tabs{display:flex;gap:6px;margin:12px 0 0}
+.tab{border-radius:8px 8px 0 0;font-size:13px;font-weight:600;color:var(--muted)}
+.tab.active{color:var(--brand);border-color:var(--brand);background:#faf5ff}
+#preview{flex:1;min-height:260px;width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+
+/* 올리기 전 확인 */
+.checks li .mark{display:inline-block;width:14px}
+.checks li .help{display:block;margin:2px 0 6px 18px;color:var(--muted);font-size:11px;line-height:1.5}
+
+/* 빈칸 남기기 체크박스 */
+label.check{display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--muted);cursor:pointer}
+label.check input{width:auto;margin:0}
+
+/* 썸네일 */
+.thumbbox{flex:1;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--line);border-radius:8px;background:#fff;padding:20px;overflow:auto}
+.thumbbox img{max-width:100%;border-radius:8px}
+
+details hr{border:none;border-top:1px solid var(--line);margin:14px 0}
