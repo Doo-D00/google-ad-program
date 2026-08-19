@@ -11,14 +11,14 @@
 
 | 방법 | 주소 |
 |---|---|
-| GitHub Pages | `https://doo-d00.github.io/google-ad-program/` |
+| GitHub Pages | `https://dev-doo.github.io/google-ad-program/` |
 | 로컬 | `http://localhost:8765` — `powershell -ExecutionPolicy Bypass -File dev-serve.ps1` |
 
 **Pages는 이미 켜져 있습니다** (Source: `master` / `/docs`). `master` 에 푸시하면 1분 내로 반영됩니다.
 
 > 이 리포는 **공개**입니다. 그래야 Pages(무료 계정)와 jsDelivr(4번 이미지 호스팅)가 동작합니다.
 > 소스에는 키가 없습니다 — 전부 사용자가 입력해 각자 브라우저의 localStorage 에만 저장됩니다.
-> 커밋 작성자 이메일은 `207117628+Doo-D00@users.noreply.github.com` (개인 메일 노출 없음).
+> 커밋 작성자 이메일은 `207117628+dev-doo@users.noreply.github.com` (개인 메일 노출 없음).
 > **앞으로도 키를 코드에 넣지 마세요.** 공개 리포라 그대로 인터넷에 노출됩니다.
 
 > `file://` 로 열면 안 됩니다. ES 모듈과 Google 로그인이 동작하지 않습니다.
@@ -47,10 +47,15 @@
 3. **OAuth 동의 화면** 구성 — 외부(External), 테스트 사용자에 본인 계정 추가
 4. **사용자 인증 정보 → 사용자 인증 정보 만들기 → OAuth 클라이언트 ID → 웹 애플리케이션**
 5. **승인된 JavaScript 원본**에 위 0번의 주소를 등록
-   - `https://doo-d00.github.io`
+   - `https://dev-doo.github.io`
    - `http://localhost:8765`
 6. 생성된 **클라이언트 ID**를 앱 → 설정 → OAuth 클라이언트 ID 에 저장
 7. 앱 상단의 `Google 미연결` 칩을 클릭해 로그인하면 블로그 목록이 채워집니다
+
+> ⚠ **2026-08-19 에 GitHub 계정 이름을 `Doo-D00` → `dev-doo` 로 바꿨습니다.**
+> 예전에 등록해둔 `https://doo-d00.github.io` 원본은 더 이상 열리지 않습니다(옛 주소는 404).
+> Cloud Console 에서 **승인된 JavaScript 원본을 `https://dev-doo.github.io` 로 고쳐 등록**하세요.
+> 안 고치면 로그인이 `origin mismatch` 로 실패합니다. 반영까지 몇 분~몇 시간 걸릴 수 있습니다.
 
 > 클라이언트 **시크릿은 필요 없습니다**. 브라우저에서 토큰만 받는 방식입니다.
 > 토큰은 약 1시간 뒤 만료되며, 만료되면 다시 연결하면 됩니다.

@@ -7,8 +7,8 @@
 키워드 하나로 **블로그 글 + 썸네일 + 본문 버튼**을 만들고 **버튼 한 번으로 Blogger에 게시**하는
 개인용 도구. 서버 없음, 빌드 도구 없음. 정적 웹앱이고 GitHub Pages로 서빙한다.
 
-- 앱: `https://doo-d00.github.io/google-ad-program/` (Pages 켜짐: `master` 브랜치 `/docs`)
-- 자체 검증: `https://doo-d00.github.io/google-ad-program/dev/selftest.html` (키 없이 순수 로직 28건)
+- 앱: `https://dev-doo.github.io/google-ad-program/` (Pages 켜짐: `master` 브랜치 `/docs`)
+- 자체 검증: `https://dev-doo.github.io/google-ad-program/dev/selftest.html` (키 없이 순수 로직 28건)
 - 로컬: `powershell -ExecutionPolicy Bypass -File dev-serve.ps1` → `http://localhost:8765`
 - 설정/키 준비 절차는 **`SETUP.md`** 참고 (계정 작업이라 사람이 직접 해야 함)
 - **리포는 공개다. 키를 코드에 넣지 말 것.** 커밋 이메일은 noreply 로 통일되어 있다.
@@ -78,7 +78,7 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
   이미지를 외부에 호스팅해야 한다. 그래서 GitHub + jsDelivr 를 쓴다. **jsDelivr 는 공개 리포만 서빙한다.**
 - **`file://` 로 열면 안 된다.** ES 모듈과 OAuth 원본 검사가 동작하지 않는다. 반드시 http 로 띄운다.
 - **OAuth 승인된 JavaScript 원본**에 실제 사용할 주소를 모두 등록해야 한다
-  (`https://doo-d00.github.io`, `http://localhost:8765`).
+  (`https://dev-doo.github.io`, `http://localhost:8765`).
 - 액세스 토큰은 약 1시간짜리이고 갱신 토큰이 없다. 만료되면 다시 연결하면 된다.
 - 게시 기본값은 **초안**. 실수로 공개 발행되는 걸 막기 위한 것이니 바꾸지 말 것.
 - 상태 표시 헬퍼는 `className` 을 통째로 덮어쓰지 말 것 — 식별용 클래스가 날아가 다음 호출에서
@@ -90,8 +90,15 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 - 비밀정보(키/토큰) 커밋 금지. 전부 사용자 입력 → localStorage.
 - 게시·업로드처럼 되돌리기 어려운 동작은 기본값을 안전한 쪽으로 둔다.
 
-## 8. 지금 상태 (2026-08-18 기준)
+## 8. 지금 상태 (2026-08-19 기준)
 정적 웹앱 완성 + 배포됨. 리포 공개 전환, Pages 켜짐, 커밋 이메일 noreply 통일까지 끝.
+
+**2026-08-19 GitHub 계정 이름 변경: `Doo-D00` → `dev-doo`**
+앱 주소가 `https://dev-doo.github.io/google-ad-program/` 로 바뀌었다. 옛 주소는 404 다
+(GitHub 는 리포 URL 은 리다이렉트해주지만 Pages 주소는 안 해준다). 리모트 URL, 커밋 이메일,
+문서, `store.js` 의 `ghOwner` 기본값은 갱신 완료. 브라우저에 옛 owner 가 저장돼 있으면
+`store.js` 의 `migrate()` 가 읽을 때 한 번 갈아끼운다.
+**남은 사람 몫: Cloud Console 의 승인된 JavaScript 원본을 새 주소로 고칠 것**(안 고치면 W3 로그인 실패).
 
 **브라우저에서 실제로 검증한 것**
 - 화면 로딩(콘솔 에러 없음), 커서 위치 버튼 삽입, 미리보기 렌더
