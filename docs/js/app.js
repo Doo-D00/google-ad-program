@@ -108,26 +108,30 @@ $("testGemini").addEventListener("click", async () => {
   }
 });
 
-// 요금제 한도로 막힌 경우에 덧붙일 안내.
+// 무료 한도가 진짜로 바닥난 경우에만 결제 얘기를 꺼낸다.
+// 분당 한도는 기다리면 풀리므로 결제와 무관하다.
 function quotaHelp(e) {
   return gemini.isPlanQuota(e?.rawBody)
-    ? "\n\n무료 한도로는 막혀 있습니다. Google AI Studio 에서 결제를 붙이면 열립니다."
+    ? "\n\n무료 한도를 다 쓰셨습니다. Google AI Studio 에서 결제를 붙이면 열립니다."
     : "";
 }
 
 // ────────────────────────── 1. 글 만들기 ──────────────────────────
-// 무료 한도에서는 좋은 AI 가 자주 붐빈다. gemini.js 가 두 번 재시도해도 안 되면
-// 기본 AI 로 한 번 더 시도한다. 바꿔서 만들었다는 사실은 화면에 알린다.
+// 무료 한도에서는 좋은 AI 가 자주 붐비고(503) 분당 요청 수도 금방 찬다(429).
+// gemini.js 가 기다렸다 재시도해도 안 되면 가벼운 AI 로 한 번 더 시도한다.
 async function generateWithFallback(args) {
   const chosen = settings.geminiModel || gemini.TEXT_MODEL_DEFAULT;
-  try {
-    return { ...(await gemini.generateText({ ...args, model: chosen })), fellBack: false };
-  } catch (e) {
-    const congested = e?.status === 503 || e?.status === 500;
-    if (!congested || chosen === gemini.TEXT_MODEL_DEFAULT) throw e;
+  const onWait = (sec) => say($("textStatus"), `사용량이 잠깐 찼습니다. ${sec}초 기다렸다 이어서 만듭니다…`, "loading");
 
-    say($("textStatus"), "AI 가 붐벼서 다른 AI 로 다시 시도 중…", "loading");
-    const r = await gemini.generateText({ ...args, model: gemini.TEXT_MODEL_DEFAULT });
+  try {
+    return { ...(await gemini.generateText({ ...args, model: chosen, onWait })), fellBack: false };
+  } catch (e) {
+    // 이 AI 가 붐비거나 분당 한도에 걸렸으면 가벼운 AI 로 넘어간다.
+    const busyModel = e?.status === 503 || e?.status === 500 || e?.status === 429;
+    if (!busyModel || chosen === gemini.TEXT_MODEL_DEFAULT) throw e;
+
+    say($("textStatus"), "고른 AI 가 붐빕니다. 가벼운 AI 로 다시 시도 중…", "loading");
+    const r = await gemini.generateText({ ...args, model: gemini.TEXT_MODEL_DEFAULT, onWait });
     return { ...r, fellBack: true };
   }
 }
@@ -326,6 +330,7 @@ $("genImage").addEventListener("click", async () => {
   try {
     lastImage = await gemini.generateImage({
       apiKey: settings.geminiKey, keyword, style: $("thumbStyle").value,
+      onWait: (sec) => say($("imgStatus"), `사용량이 잠깐 찼습니다. ${sec}초 기다렸다 이어서 만듭니다…`, "loading"),
     });
     const img = document.createElement("img");
     img.src = lastImage.dataUrl;

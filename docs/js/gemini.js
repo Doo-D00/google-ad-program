@@ -6,8 +6,8 @@
 
 // 2026-08-19 무료 한도로 실제 호출해 본 결과가 라벨에 반영되어 있다:
 //   3.1-flash-lite  3~5초에 안정적으로 성공 → 기본값
-//   3.7-flash       503(과부하)이 자주 난다
-//   2.5-pro         429(한도 초과). 무료 한도가 거의 없다
+//   3.7-flash       503(과부하)과 분당 한도 429 가 잦다
+//   2.5-pro         분당 한도가 가장 빡빡하다
 export const TEXT_MODELS = [
   { id: "gemini-3.1-flash-lite", label: "빠름 (기본)" },
   { id: "gemini-3.7-flash", label: "품질 좋음 (자주 붐빔)" },
@@ -23,8 +23,9 @@ export const TOPIC_TONES = [
   { id: "생활", tone: "친근하게. 어려운 말을 풀어 쓴다." },
 ];
 
-// ⚠ 이미지 생성은 무료 한도가 사실상 없다. 무료 키로는 세 모델 모두 429(요금제 한도)다.
-//   결제를 붙여야 열린다. 코드 문제로 오해하지 말 것. (2026-08-19 확인)
+// ⚠ 이미지는 무료 한도의 분당 요청 수가 적어 429 가 자주 난다. 영구 차단이 아니라
+//   50초쯤 기다리면 풀린다. 문구만 보면 "check your plan and billing" 이라 결제 문제로
+//   오해하기 쉽다 — RetryInfo 유무로 구분한다(isPlanQuota 참고). (2026-08-19 확인)
 export const IMAGE_MODEL = "gemini-3.1-flash-image";
 
 export const THUMB_STYLES = [
@@ -41,9 +42,28 @@ const TEST_TIMEOUT_MS = 30000;
 // 텍스트도 thinking 이 출력 토큰을 나눠 쓴다. 작게 잡으면 본문이 비거나 잘린다.
 const MAX_OUTPUT_TOKENS = 16384;
 
-// 429 는 두 가지가 섞여 온다. "잠시 후 재시도"로 풀리는 초당 요청 제한과,
-// 요금제 자체에 한도가 없어서 기다려도 안 풀리는 경우다. 응답 본문으로 구분한다.
+// 429 응답에 얼마나 기다리면 되는지가 들어 있다(RetryInfo). ms 로 돌려준다.
+export function retryDelayMs(bodyText) {
+  try {
+    const details = JSON.parse(bodyText)?.error?.details || [];
+    const rd = details.find((d) => String(d["@type"] || "").includes("RetryInfo"));
+    const raw = rd?.retryDelay; // "53s", "1.5s"
+    if (!raw) return 0;
+    const n = parseFloat(String(raw).replace(/s$/, ""));
+    return Number.isFinite(n) ? Math.ceil(n * 1000) : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+// 429 는 두 가지가 섞여 온다. 기다리면 풀리는 분당 한도와, 요금제 자체에 한도가 없어
+// 기다려도 안 풀리는 경우다.
+//
+// ⚠ 본문만 보고 판단하면 안 된다. 무료 한도 초과에도 "check your plan and billing
+// details" 라는 같은 문구가 붙는다. 기다리면 풀리는 쪽에만 RetryInfo 가 붙으므로
+// 그걸로 가른다. (이걸 문구로만 판단했다가 분당 한도를 영구 차단으로 오진했었다.)
 export function isPlanQuota(bodyText) {
+  if (retryDelayMs(bodyText) > 0) return false;
   return /billing|plan|exceeded your current quota/i.test(bodyText || "");
 }
 
@@ -66,8 +86,12 @@ function explainHttpError(status, bodyText) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// 503/500 과 초당 제한형 429 는 조금 기다리면 풀린다. 요금제 한도형 429 는 바로 던진다.
+// 503/500 과 분당 한도형 429 는 기다리면 풀린다. 요금제 한도형 429 는 바로 던진다.
 const RETRY_DELAYS_MS = [2000, 5000];
+
+// 서버가 "N초 뒤에 다시" 라고 알려주면 그만큼 기다린다. 다만 너무 길면 사용자를
+// 하염없이 기다리게 하지 않고, 몇 초 뒤에 누르라고 알려주는 편이 낫다.
+const MAX_WAIT_MS = 70000;
 
 async function callOnce({ apiKey, model, body, timeoutMs }) {
   const ctrl = new AbortController();
@@ -95,14 +119,23 @@ async function callOnce({ apiKey, model, body, timeoutMs }) {
   }
 }
 
-async function call(args) {
+// onWait(초) — 오래 기다려야 할 때 화면에 알리라고 불러 준다.
+async function call({ onWait, ...args }) {
   for (let attempt = 0; ; attempt++) {
     try {
       return await callOnce(args);
     } catch (e) {
+      const serverWait = e?.status === 429 ? retryDelayMs(e?.rawBody) : 0;
       const transient = e?.status === 503 || e?.status === 500 || (e?.status === 429 && !isPlanQuota(e?.rawBody));
       if (!transient || attempt >= RETRY_DELAYS_MS.length) throw e;
-      await sleep(RETRY_DELAYS_MS[attempt]);
+
+      const wait = Math.max(RETRY_DELAYS_MS[attempt], serverWait);
+      if (wait > MAX_WAIT_MS) {
+        e.message = `분당 사용량을 넘었습니다. ${Math.ceil(serverWait / 1000)}초 뒤에 다시 눌러 주세요.`;
+        throw e;
+      }
+      if (wait > 8000 && onWait) onWait(Math.ceil(wait / 1000));
+      await sleep(wait);
     }
   }
 }
@@ -204,18 +237,18 @@ function pickText(data) {
     .trim();
 }
 
-export async function generateText({ apiKey, model, keyword, topic, lang, mode }) {
+export async function generateText({ apiKey, model, keyword, topic, lang, mode, onWait }) {
   const { system, user } = buildPrompt({ keyword, topic, lang, mode });
   const useModel = model || TEXT_MODEL_DEFAULT;
 
   let data;
   try {
-    data = await call({ apiKey, model: useModel, body: textBody({ system, user, withSystemField: true }), timeoutMs: TEXT_TIMEOUT_MS });
+    data = await call({ apiKey, model: useModel, body: textBody({ system, user, withSystemField: true }), timeoutMs: TEXT_TIMEOUT_MS, onWait });
   } catch (e) {
     // systemInstruction 필드를 거부하는 모델/버전이면 지시를 본문 앞에 붙여 한 번만 다시 시도한다.
     const rejectedSystemField = e?.status === 400 && /system[_ ]?instruction/i.test(e?.rawBody || "");
     if (!rejectedSystemField) throw e;
-    data = await call({ apiKey, model: useModel, body: textBody({ system, user, withSystemField: false }), timeoutMs: TEXT_TIMEOUT_MS });
+    data = await call({ apiKey, model: useModel, body: textBody({ system, user, withSystemField: false }), timeoutMs: TEXT_TIMEOUT_MS, onWait });
   }
 
   const finish = data?.candidates?.[0]?.finishReason || "";
@@ -248,7 +281,7 @@ function buildImagePrompt({ keyword, style }) {
   );
 }
 
-export async function generateImage({ apiKey, keyword, style }) {
+export async function generateImage({ apiKey, keyword, style, onWait }) {
   const data = await call({
     apiKey,
     model: IMAGE_MODEL,
@@ -257,6 +290,7 @@ export async function generateImage({ apiKey, keyword, style }) {
       generationConfig: { responseModalities: ["IMAGE"] },
     },
     timeoutMs: IMAGE_TIMEOUT_MS,
+    onWait,
   });
 
   const parts = data?.candidates?.[0]?.content?.parts || [];

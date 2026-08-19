@@ -20,7 +20,7 @@ API 호출은 여기서 확인할 수 없습니다.</p>
 
 <script type="module">
 import { mdToHtml, splitTitle, esc, escAttr } from "../js/markdown.js";
-import { TEXT_MODELS, TEXT_MODEL_DEFAULT, TOPIC_TONES, THUMB_STYLES, BLANKS, BUTTON_PLACEHOLDER, isPlanQuota, buildPrompt } from "../js/gemini.js";
+import { TEXT_MODELS, TEXT_MODEL_DEFAULT, TOPIC_TONES, THUMB_STYLES, BLANKS, BUTTON_PLACEHOLDER, isPlanQuota, retryDelayMs, buildPrompt } from "../js/gemini.js";
 import * as buttons from "../js/buttons.js";
 import * as checks from "../js/checks.js";
 import { markBlanks, unmarkBlanks } from "../js/editor.js";
@@ -115,9 +115,22 @@ const helpful = checks.runChecks("<p>[내 경험]</p>").list.find((c) => c.key =
 check("걸린 항목에는 안내가 붙는다", helpful.help.length > 0, true);
 contains("남은 것을 이름으로 보여준다", helpful.detail, "[내 경험]");
 
-// ── 429 구분 ──
-check("요금제 한도형 429 를 알아본다",
-  isPlanQuota("You exceeded your current quota, please check your plan and billing details."), true);
+// ── 429 구분: 기다리면 풀리는 분당 한도 vs 진짜 요금제 한도 ──
+// 둘 다 "check your plan and billing" 이라 문구로는 구분이 안 된다. RetryInfo 로 가른다.
+// (문구로만 판단했다가 분당 한도를 영구 차단으로 오진한 적이 있다.)
+const minuteLimit = JSON.stringify({ error: {
+  message: "You exceeded your current quota, please check your plan and billing details.",
+  details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "53s" }] } });
+const planLimit = JSON.stringify({ error: {
+  message: "You exceeded your current quota, please check your plan and billing details." } });
+
+check("분당 한도는 대기 시간을 읽는다", retryDelayMs(minuteLimit), 53000);
+check("분당 한도는 요금제 문제가 아니다", isPlanQuota(minuteLimit), false);
+check("RetryInfo 없으면 요금제 한도", isPlanQuota(planLimit), true);
+check("소수점 대기도 읽는다",
+  retryDelayMs(JSON.stringify({ error: { details: [{ "@type": "RetryInfo", retryDelay: "1.5s" }] } })), 1500);
+check("비JSON 은 0", retryDelayMs("not json"), 0);
+check("RetryInfo 가 없으면 0", retryDelayMs(planLimit), 0);
 check("초당 제한형 429 는 요금제 문제가 아니다",
   isPlanQuota("Resource has been exhausted (e.g. check quota)."), false);
 check("null 본문도 안전하다", isPlanQuota(null), false);
