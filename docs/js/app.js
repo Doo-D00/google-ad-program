@@ -287,9 +287,41 @@ function tistoryWriteUrl() {
   return `https://${host}/manage/newpost/`;
 }
 
+// 확장 프로그램이 깔려 있으면 bridge.js 가 이 표시를 남긴다.
+const hasExtension = () => !!document.documentElement.dataset.gapExtension;
+
+// 확장에 글을 넘긴다. 확장이 티스토리 글쓰기 창을 열고 제목·본문을 채운다.
+function sendToExtension(title, html) {
+  return new Promise((resolve) => {
+    const onResult = (e) => {
+      if (e.source !== window || e.data?.tag !== "gap-tistory" || e.data?.type !== "PUBLISH_RESULT") return;
+      window.removeEventListener("message", onResult);
+      resolve(e.data);
+    };
+    window.addEventListener("message", onResult);
+    window.postMessage({ tag: "gap-tistory", type: "PUBLISH", title, html, blogUrl: settings.blogUrl || "" }, "*");
+    // 확장이 응답을 안 주면 5초 뒤 실패로 본다.
+    setTimeout(() => { window.removeEventListener("message", onResult); resolve(null); }, 5000);
+  });
+}
+
 $("publishBtn").addEventListener("click", async () => {
   const html = getBody().trim();
   if (!html) return say($("topStatus"), "아직 글이 없습니다.", "warn");
+  const title = $("postTitle").value.trim();
+
+  // 확장이 있으면 티스토리 화면까지 자동으로 채워 준다.
+  if (hasExtension()) {
+    if (!settings.blogUrl) return say($("topStatus"), "[설정]에 블로그 주소를 먼저 넣어 주세요.", "err");
+    say($("topStatus"), "티스토리 글쓰기 창을 열고 글을 채우는 중…", "loading");
+    // 확장이 편집기를 못 찾을 때를 대비해 클립보드에도 넣어 둔다.
+    await copyRich(html, bodyEl().innerText);
+    const r = await sendToExtension(title, html);
+    if (r?.ok) {
+      return say($("topStatus"), "티스토리 창에 글을 채웠습니다. 내용을 확인하고 발행하세요.", "ok");
+    }
+    say($("topStatus"), `확장 프로그램이 응답하지 않습니다${r?.error ? ` (${r.error})` : ""}. 복사해서 직접 붙여넣어 주세요.`, "warn");
+  }
 
   const copied = await copyRich(html, bodyEl().innerText);
   const url = tistoryWriteUrl();
