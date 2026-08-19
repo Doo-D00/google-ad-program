@@ -98,7 +98,10 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 (GitHub 는 리포 URL 은 리다이렉트해주지만 Pages 주소는 안 해준다). 리모트 URL, 커밋 이메일,
 문서, `store.js` 의 `ghOwner` 기본값은 갱신 완료. 브라우저에 옛 owner 가 저장돼 있으면
 `store.js` 의 `migrate()` 가 읽을 때 한 번 갈아끼운다.
-**남은 사람 몫: Cloud Console 의 승인된 JavaScript 원본을 새 주소로 고칠 것**(안 고치면 W3 로그인 실패).
+**남은 사람 몫(2026-08-19 확인)**: OAuth 클라이언트는 애초에 만들어진 적이 없다 — "원본을 고친다"가
+아니라 `SETUP.md` 3번을 처음부터 하는 것이다. Blogger API v3 는 프로젝트 `pivotal-bonbon-471106-n0`
+에 사용 설정해 두었다. 동의 화면 생성은 콘솔의 "만들기"가 응답하지 않아 끝내지 못했다(재시도 필요).
+원본에는 `https://dev-doo.github.io` 와 `http://localhost:8765` 두 개를 넣는다.
 
 **브라우저에서 실제로 검증한 것**
 - 화면 로딩(콘솔 에러 없음), 커서 위치 버튼 삽입, 미리보기 렌더
