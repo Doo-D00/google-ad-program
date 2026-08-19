@@ -23,6 +23,7 @@ import { mdToHtml, splitTitle, esc, escAttr } from "../js/markdown.js";
 import { TEXT_MODELS, TEXT_MODEL_DEFAULT, TOPIC_TONES, BLANKS, BUTTON_PLACEHOLDER, isPlanQuota, buildPrompt } from "../js/gemini.js";
 import * as buttons from "../js/buttons.js";
 import * as checks from "../js/checks.js";
+import { markBlanks, unmarkBlanks } from "../js/editor.js";
 
 const out = document.getElementById("out");
 let pass = 0, fail = 0;
@@ -150,6 +151,14 @@ const withBlank = checks.runChecks("<p>[내 경험]</p>");
 check("빈칸이 남으면 걸린다", withBlank.list.find(c => c.key === "blanks").ok, false);
 const btnNoUrl = checks.runChecks(buttons.buttonHtml({ text: "t", url: "" }) + B);
 check("URL 빈 버튼이 있으면 걸린다", btnNoUrl.list.find(c => c.key === "buttons").ok, false);
+
+// ── 빈칸 칠하기(화면 표시용) ──
+check("빈칸을 칠한다", markBlanks("<p>[내 경험]</p>").includes(String.fromCharCode(60)+"mark class=\"blank\""), true);
+check("버튼 자리는 다른 색으로", markBlanks("<p>[버튼: 텍스트 | URL]</p>").includes("blank slot"), true);
+check("칠을 벗기면 원래대로", unmarkBlanks(markBlanks("<p>[내 경험]</p>")), "<p>[내 경험]</p>");
+check("두 번 칠해도 한 겹", (markBlanks(markBlanks("<p>[내 경험]</p>")).match(/mark class/g)||[]).length, 1);
+check("칠한 뒤에도 빈칸 개수는 그대로", checks.countBlanks(markBlanks("<p>[내 경험] [내 의견]</p>")), 2);
+check("일반 글자는 안 건드린다", markBlanks("<p>그냥 글</p>"), "<p>그냥 글</p>");
 
 // ── 결과 ──
 const sum = document.getElementById("summary");

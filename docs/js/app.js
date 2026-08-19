@@ -1,13 +1,17 @@
 // app.js — 화면 조립 + 흐름 제어.
-// 키워드 → 빈칸 포함 초안 → 사람이 채움 → 버튼 삽입 → 점검 → HTML 복사 → 티스토리에 붙여넣기.
 //
-// 게시 자동화는 없다. 티스토리 오픈 API 는 2024년 2월에 종료됐다(CLAUDE.md 참고).
+// 사용자는 HTML 을 보지 않는다. 워드처럼 글 위에서 바로 고친다(contenteditable).
+// 안에서만 HTML 을 다루고, 화면 문구는 전부 일상어로 쓴다.
+//
+// 흐름: 키워드 → 빈칸 있는 초안 → 사람이 빈칸 채움 → 버튼 넣기 → 확인 → 복사 → 티스토리.
+// 게시 자동화는 없다. 티스토리 오픈 API 는 2024년 2월에 종료됐다.
 
 import * as store from "./store.js";
 import { mdToHtml, splitTitle, esc, escAttr } from "./markdown.js";
 import * as gemini from "./gemini.js";
 import * as buttons from "./buttons.js";
 import * as checks from "./checks.js";
+import { markBlanks, unmarkBlanks } from "./editor.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,7 +31,27 @@ function busy(btn, on, label) {
 }
 
 let settings = store.load();
-let lastMarkdown = ""; // 생성 원본. 백업용으로 남겨 둔다(CLAUDE.md 10장).
+let lastMarkdown = ""; // 생성 원본. 보관용으로 남겨 둔다.
+
+// ────────────────────────── 본문 읽고 쓰기 ──────────────────────────
+// 화면에는 빈칸이 칠해진 상태로 두고, 밖으로 나갈 때는 칠을 벗긴다.
+const bodyEl = () => $("postBody");
+const getBody = () => unmarkBlanks(bodyEl().innerHTML);
+
+function setBody(html) {
+  bodyEl().innerHTML = markBlanks(html);
+  afterBodyChange();
+}
+
+function afterBodyChange() {
+  renderPlaceholders();
+  syncHtmlView();
+  saveDraft();
+}
+
+function syncHtmlView() {
+  $("htmlView").value = getBody();
+}
 
 // ────────────────────────── 설정 ──────────────────────────
 const SETTING_FIELDS = { sGeminiKey: "geminiKey", sGeminiModel: "geminiModel" };
@@ -56,24 +80,24 @@ $("testGemini").addEventListener("click", async () => {
   const btn = $("testGemini");
   const apiKey = $("sGeminiKey").value.trim();
   const model = $("sGeminiModel").value;
-  if (!apiKey) return say($("settingsStatus"), "Gemini 키를 입력하세요.", "err");
-  busy(btn, true, "테스트 중…");
-  say($("settingsStatus"), `테스트 중… (${model})`, "loading");
+  if (!apiKey) return say($("settingsStatus"), "키를 붙여넣어 주세요.", "err");
+  busy(btn, true, "확인 중…");
+  say($("settingsStatus"), "확인 중…", "loading");
   try {
     await gemini.testKey({ apiKey, model });
-    // 테스트만 하고 [닫기] 를 누르면 키가 날아간다. 성공했으면 바로 저장해 준다.
+    // 확인만 하고 [닫기] 를 누르면 키가 날아간다. 성공했으면 바로 저장해 준다.
     settings = store.save({ geminiKey: apiKey, geminiModel: model });
-    say($("settingsStatus"), `성공! ${model} 키가 정상입니다. (저장했습니다)`, "ok");
+    say($("settingsStatus"), "잘 됩니다! 저장했습니다.", "ok");
   } catch (e) {
-    say($("settingsStatus"), "실패: " + e.message, "err");
+    say($("settingsStatus"), "안 됩니다: " + e.message, "err");
   } finally {
     busy(btn, false);
   }
 });
 
-// ────────────────────────── 1. 초안 생성 ──────────────────────────
-// 무료 한도에서는 고품질 모델이 자주 503(과부하)이다. gemini.js 가 두 번 재시도해도
-// 안 되면 기본 모델로 한 번 더 시도한다. 사용자에게는 바꿔서 만들었다고 알린다.
+// ────────────────────────── 1. 초안 만들기 ──────────────────────────
+// 무료 한도에서는 좋은 AI 가 자주 붐빈다. gemini.js 가 두 번 재시도해도 안 되면
+// 기본 AI 로 한 번 더 시도한다. 바꿔서 만들었다는 사실은 화면에 알린다.
 async function generateWithFallback({ keyword, topic, lang }) {
   const chosen = settings.geminiModel || gemini.TEXT_MODEL_DEFAULT;
   const args = { apiKey: settings.geminiKey, keyword, topic, lang };
@@ -84,7 +108,7 @@ async function generateWithFallback({ keyword, topic, lang }) {
     const congested = e?.status === 503 || e?.status === 500;
     if (!congested || chosen === gemini.TEXT_MODEL_DEFAULT) throw e;
 
-    say($("textStatus"), `${chosen} 이 혼잡합니다. ${gemini.TEXT_MODEL_DEFAULT} 로 다시 시도 중…`, "loading");
+    say($("textStatus"), "AI 가 붐벼서 다른 AI 로 다시 시도 중…", "loading");
     const r = await gemini.generateText({ ...args, model: gemini.TEXT_MODEL_DEFAULT });
     return { ...r, usedModel: gemini.TEXT_MODEL_DEFAULT, fellBack: true };
   }
@@ -93,25 +117,24 @@ async function generateWithFallback({ keyword, topic, lang }) {
 $("genText").addEventListener("click", async () => {
   const btn = $("genText");
   const keyword = $("kw").value.trim();
-  if (!keyword) return say($("textStatus"), "키워드를 입력하세요.", "warn");
-  if (!settings.geminiKey) return say($("textStatus"), "설정에서 Gemini 키를 먼저 저장하세요.", "err");
+  if (!keyword) return say($("textStatus"), "무엇에 대해 쓸지 먼저 적어 주세요.", "warn");
+  if (!settings.geminiKey) return say($("textStatus"), "먼저 [설정]에서 Gemini 키를 넣어 주세요.", "err");
+  if (getBody().trim() && !confirm("지금 쓰고 있는 글을 새 초안으로 바꿉니다. 계속할까요?")) return;
 
-  busy(btn, true, "생성 중…");
-  say($("textStatus"), "생성 중… (모델에 따라 1분 이상 걸릴 수 있습니다)", "loading");
+  busy(btn, true, "만드는 중…");
+  say($("textStatus"), "만드는 중… 30초쯤 걸립니다.", "loading");
   try {
-    const { text, truncated, usedModel, fellBack } = await generateWithFallback({
+    const { text, truncated, fellBack } = await generateWithFallback({
       keyword, topic: $("topic").value, lang: $("lang").value,
     });
     lastMarkdown = text;
     const { title, body } = splitTitle(text);
     if (title) $("postTitle").value = title;
-    $("postBody").value = mdToHtml(body || text);
-    renderPreview();
-    renderPlaceholders();
+    setBody(mdToHtml(body || text));
 
-    const note = fellBack ? `\n(고른 모델이 혼잡해서 ${usedModel} 로 생성했습니다)` : "";
+    const note = fellBack ? "\n(고른 AI 가 붐벼서 다른 AI 로 만들었습니다)" : "";
     say($("textStatus"),
-      (truncated ? "완료 (길이 제한으로 잘렸을 수 있습니다)" : "완료 — 빈칸을 채우세요") + note,
+      (truncated ? "다 됐습니다 (조금 잘렸을 수 있어요)" : "다 됐습니다 — 노란 빈칸을 채워 주세요") + note,
       truncated || fellBack ? "warn" : "ok");
   } catch (e) {
     say($("textStatus"), e.message, "err");
@@ -120,22 +143,22 @@ $("genText").addEventListener("click", async () => {
   }
 });
 
-// ────────────────────────── 2. 제휴 버튼 ──────────────────────────
-// 초안에 들어 있는 [버튼: 텍스트 | URL] 자리마다 입력칸을 만들어 준다.
+// ────────────────────────── 2. 링크 버튼 ──────────────────────────
+// 초안에 잡힌 버튼 자리마다 입력칸을 만들어 준다.
 function renderPlaceholders() {
-  const found = buttons.findPlaceholders($("postBody").value);
+  const found = buttons.findPlaceholders(getBody());
   const box = $("phList");
 
   if (!found.length) {
-    box.innerHTML = `<p class="hint">본문에 버튼 자리가 없습니다. 초안을 생성하거나 아래에서 직접 넣으세요.</p>`;
+    box.innerHTML = `<p class="hint">아직 버튼 자리가 없습니다. 초안을 만들면 자리가 잡힙니다.</p>`;
     return;
   }
 
   box.innerHTML = found.map((p, i) => `
     <div class="ph" data-i="${i}">
-      <label>버튼 ${i + 1}</label>
-      <input class="ph-text" type="text" placeholder="버튼 텍스트" value="${escAttr(p.text)}">
-      <input class="ph-url" type="text" placeholder="https://... (제휴 링크)" value="${escAttr(p.url)}">
+      <label>${i + 1}번째 버튼</label>
+      <input class="ph-text" type="text" placeholder="버튼에 쓸 문구" value="${escAttr(p.text)}">
+      <input class="ph-url" type="text" placeholder="https://... (링크 주소)" value="${escAttr(p.url)}">
       <button type="button" class="ph-apply accent">이 자리에 버튼 넣기</button>
     </div>`).join("");
 
@@ -149,84 +172,94 @@ function applyPlaceholder(i) {
   if (!box) return;
   const text = box.querySelector(".ph-text").value.trim();
   const url = box.querySelector(".ph-url").value.trim();
-  if (!text || !url) return say($("btnStatus"), "버튼 텍스트와 링크를 모두 입력하세요.", "warn");
+  if (!text || !url) return say($("btnStatus"), "버튼 문구와 링크 주소를 모두 넣어 주세요.", "warn");
 
-  // 본문이 그새 바뀌었을 수 있으므로 그때그때 다시 찾는다.
-  const found = buttons.findPlaceholders($("postBody").value);
+  // 글이 그새 바뀌었을 수 있으므로 그때그때 다시 찾는다.
+  const current = getBody();
+  const found = buttons.findPlaceholders(current);
   const target = found[i];
-  if (!target) return say($("btnStatus"), "버튼 자리를 찾지 못했습니다. 본문을 확인하세요.", "err");
+  if (!target) return say($("btnStatus"), "버튼 자리를 찾지 못했습니다.", "err");
 
-  let body = buttons.replaceAt($("postBody").value, target.index, target.raw, buttons.buttonHtml({ text, url }));
-  body = buttons.appendNotice(body);
-  $("postBody").value = body;
-  renderPreview();
-  renderPlaceholders();
-  say($("btnStatus"), "버튼을 넣었습니다. 고지 문구도 확인하세요.", "ok");
+  let next = buttons.replaceAt(current, target.index, target.raw, buttons.buttonHtml({ text, url }));
+  next = buttons.appendNotice(next);
+  setBody(next);
+  say($("btnStatus"), "버튼을 넣었습니다.", "ok");
 }
 
 $("insertButton").addEventListener("click", () => {
   const text = $("btnText").value.trim();
   const url = $("btnUrl").value.trim();
-  if (!text || !url) return say($("btnStatus"), "버튼 텍스트와 링크를 모두 입력하세요.", "warn");
+  if (!text || !url) return say($("btnStatus"), "버튼 문구와 링크 주소를 모두 넣어 주세요.", "warn");
 
-  insertIntoBody(buttons.buttonHtml({ text, url }));
-  $("postBody").value = buttons.appendNotice($("postBody").value);
-  renderPreview();
-  renderPlaceholders();
-  say($("btnStatus"), "본문에 삽입했습니다.", "ok");
+  insertAtCursor(buttons.buttonHtml({ text, url }));
+  setBody(buttons.appendNotice(getBody()));
+  $("btnText").value = "";
+  $("btnUrl").value = "";
+  say($("btnStatus"), "버튼을 넣었습니다.", "ok");
 });
 
-// ────────────────────────── 3. 발행 전 점검 ──────────────────────────
+// ────────────────────────── 3. 올리기 전 확인 ──────────────────────────
 function renderChecks() {
-  const { list, allOk } = checks.runChecks($("postBody").value);
+  const { list, allOk } = checks.runChecks(getBody());
   $("checkList").innerHTML = list.map((c) =>
     `<li class="${c.ok ? "ok" : "warn"}">${c.ok ? "✔" : "✕"} ${esc(c.label)} — ${esc(c.detail)}</li>`
   ).join("");
-  say($("topStatus"), allOk ? "점검 통과 — 발행해도 좋습니다." : "발행 전 확인 필요 — 아래 항목을 보세요.", allOk ? "ok" : "warn");
+  say($("topStatus"),
+    allOk ? "다 됐습니다. 올리셔도 좋습니다." : "올리기 전에 아래를 먼저 봐 주세요.",
+    allOk ? "ok" : "warn");
 }
 
 $("runCheck").addEventListener("click", renderChecks);
 
 // ────────────────────────── 4. 내보내기 ──────────────────────────
-function fullHtml() {
-  const title = $("postTitle").value.trim();
-  // 티스토리 에디터에는 제목을 따로 넣으므로 본문만 내보낸다.
-  return $("postBody").value.trim() + (title ? "" : "");
-}
-
-async function copyText(text) {
+// 서식이 살아 있는 상태로 복사한다. 그래야 티스토리 기본 편집기에 그냥 붙여넣어도
+// 버튼과 소제목이 그대로 살아난다(HTML 모드로 들어갈 필요가 없다).
+async function copyRich(html) {
   try {
-    await navigator.clipboard.writeText(text);
-    return true;
+    if (window.ClipboardItem && navigator.clipboard?.write) {
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([html], { type: "text/plain" }),
+      })]);
+      return true;
+    }
+  } catch (_) { /* 아래 방식으로 넘어간다 */ }
+
+  // 예전 방식: 화면의 글을 통째로 선택해서 복사한다. 서식이 함께 복사된다.
+  try {
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(bodyEl());
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const ok = document.execCommand("copy");
+    sel.removeAllRanges();
+    return ok;
   } catch (_) {
-    // 클립보드 권한이 없으면 선택 상태로라도 만들어 준다.
-    const ta = $("postBody");
-    ta.focus();
-    ta.select();
     return false;
   }
 }
 
 $("copyHtml").addEventListener("click", async () => {
-  const html = fullHtml();
-  if (!html) return say($("topStatus"), "본문이 비어 있습니다.", "warn");
-  const ok = await copyText(html);
+  const html = getBody().trim();
+  if (!html) return say($("topStatus"), "아직 글이 없습니다.", "warn");
+  const ok = await copyRich(html);
   say($("topStatus"),
-    ok ? "HTML 을 복사했습니다. 티스토리 글쓰기 → HTML 모드에 붙여넣으세요."
-       : "복사 권한이 없어 본문을 선택했습니다. Ctrl+C 로 복사하세요.",
+    ok ? "복사했습니다. 티스토리 글쓰기에서 붙여넣기(Ctrl+V) 하세요."
+       : "복사가 막혔습니다. 글을 직접 선택해서 Ctrl+C 로 복사해 주세요.",
     ok ? "ok" : "warn");
 });
 
 $("saveHtml").addEventListener("click", () => {
-  const title = $("postTitle").value.trim() || "draft";
-  const html = fullHtml();
-  if (!html) return say($("topStatus"), "본문이 비어 있습니다.", "warn");
+  const title = $("postTitle").value.trim() || "내 글";
+  const html = getBody().trim();
+  if (!html) return say($("topStatus"), "아직 글이 없습니다.", "warn");
 
-  // 원본 마크다운도 같이 남겨 두면 나중에 다시 손보기 쉽다(CLAUDE.md 10장 백업).
+  // 원본도 같이 남겨 두면 나중에 다시 손보기 쉽다.
   const doc =
     `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title>\n` +
     `<h1>${esc(title)}</h1>\n${html}\n` +
-    (lastMarkdown ? `\n<!-- 생성 원본(마크다운)\n${lastMarkdown.replace(/-->/g, "-- >")}\n-->\n` : "");
+    (lastMarkdown ? `\n<!-- 처음 만들어진 원본\n${lastMarkdown.replace(/-->/g, "-- >")}\n-->\n` : "");
 
   const blob = new Blob([doc], { type: "text/html;charset=utf-8" });
   const a = document.createElement("a");
@@ -234,39 +267,81 @@ $("saveHtml").addEventListener("click", () => {
   a.download = title.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) + ".html";
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  say($("topStatus"), "파일로 저장했습니다.", "ok");
+  say($("topStatus"), "파일로 보관했습니다.", "ok");
 });
 
-// ────────────────────────── 본문 편집 / 미리보기 ──────────────────────────
-// 커서 위치에 끼워 넣는다. 커서가 없으면 맨 끝.
-function insertIntoBody(html) {
-  const el = $("postBody");
-  const start = el.selectionStart ?? el.value.length;
-  const end = el.selectionEnd ?? el.value.length;
-  const before = el.value.slice(0, start);
-  const after = el.value.slice(end);
-  const glue = before && !before.endsWith("\n") ? "\n" : "";
-  const chunk = glue + html + "\n";
-
-  el.value = before + chunk + after;
-  const caret = before.length + chunk.length;
+// ────────────────────────── 글 편집 ──────────────────────────
+// 커서 자리에 끼워 넣는다. 커서가 글 안에 없으면 맨 끝에 붙인다.
+function insertAtCursor(html) {
+  const el = bodyEl();
   el.focus();
-  el.setSelectionRange(caret, caret);
-  renderPreview();
+  const sel = window.getSelection();
+
+  if (!sel || !sel.rangeCount || !el.contains(sel.anchorNode)) {
+    el.innerHTML = el.innerHTML + html;
+    afterBodyChange();
+    return;
+  }
+
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const frag = range.createContextualFragment(html);
+  range.insertNode(frag);
+  sel.removeAllRanges();
+  afterBodyChange();
 }
 
-// ── 작성 중인 글 자동 저장 ──
-// 서버가 없으므로 탭을 닫거나 새로고침하면 쓰던 글이 그냥 사라진다.
+// 노란 빈칸을 클릭하면 그 자리를 통째로 선택해 준다. 바로 타이핑하면 덮어써진다.
+bodyEl().addEventListener("click", (e) => {
+  const mark = e.target.closest?.("mark.blank");
+  if (!mark) return;
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(mark);
+  sel.removeAllRanges();
+  sel.addRange(range);
+});
+
+// 빈칸에 글자를 넣기 시작하면 노란 칠을 벗겨 준다(다 채운 티가 나야 한다).
+bodyEl().addEventListener("input", () => {
+  bodyEl().querySelectorAll("mark.blank").forEach((m) => {
+    const t = m.textContent.trim();
+    const stillBlank = gemini.BLANKS.includes(t) || /^\[버튼\s*:[^\]]*\]$/.test(t);
+    if (!stillBlank) m.replaceWith(...m.childNodes);
+  });
+  afterBodyChange();
+});
+
+// 붙여넣기는 서식을 버리고 글자만 받는다. 남의 사이트 스타일이 딸려오면 티스토리에서 깨진다.
+bodyEl().addEventListener("paste", (e) => {
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+  document.execCommand("insertText", false, text);
+});
+
+// 간단한 서식 도구
+$("toolbar").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-cmd]");
+  if (!btn) return;
+  bodyEl().focus();
+  const cmd = btn.dataset.cmd;
+  if (cmd === "heading") document.execCommand("formatBlock", false, "h3");
+  else document.execCommand(cmd, false, null);
+  afterBodyChange();
+});
+
+// ── 쓰던 글 자동 보관 ──
+// 서버가 없으므로 탭을 닫거나 새로고침하면 그냥 사라진다.
 const DRAFT_KEY = "gap.draft.v1";
 let draftTimer = null;
 
 function saveDraft() {
   clearTimeout(draftTimer);
   draftTimer = setTimeout(() => {
-    const title = $("postTitle").value, body = $("postBody").value;
+    const title = $("postTitle").value, body = bodyEl().innerHTML;
     // 빈 상태는 저장하지 않는다. 저장하면 앱을 새 탭에서 열자마자
-    // 다른 탭에서 쓰던 초안이 빈 값으로 덮여 사라진다. 비우는 것은 [새 글] 로만.
-    if (!title && !body) return;
+    // 다른 탭에서 쓰던 글이 빈 값으로 덮여 사라진다. 비우는 것은 [새로 쓰기] 로만.
+    if (!title && !bodyEl().textContent.trim()) return;
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, body, md: lastMarkdown, at: Date.now() })); } catch (_) {}
   }, 500);
 }
@@ -276,67 +351,29 @@ function restoreDraft() {
     const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
     if (!d || (!d.title && !d.body)) return;
     $("postTitle").value = d.title || "";
-    $("postBody").value = d.body || "";
+    bodyEl().innerHTML = markBlanks(unmarkBlanks(d.body || ""));
     lastMarkdown = d.md || "";
+    afterBodyChange();
     const when = d.at ? new Date(d.at).toLocaleString() : "";
-    say($("topStatus"), `작성 중이던 글을 복원했습니다${when ? ` (${when})` : ""}. 새로 시작하려면 [새 글].`, "ok");
+    say($("topStatus"), `쓰시던 글을 되살렸습니다${when ? ` (${when})` : ""}.`, "ok");
   } catch (_) {}
 }
 
 $("newPost").addEventListener("click", () => {
-  if (($("postTitle").value || $("postBody").value) && !confirm("제목과 본문을 비웁니다. 계속할까요?")) return;
+  if (($("postTitle").value || bodyEl().textContent.trim()) && !confirm("제목과 글을 모두 비웁니다. 계속할까요?")) return;
   $("postTitle").value = "";
-  $("postBody").value = "";
+  bodyEl().innerHTML = "";
   lastMarkdown = "";
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
-  renderPreview();
-  renderPlaceholders();
+  afterBodyChange();
   $("checkList").innerHTML = "";
-  say($("topStatus"), "새 글을 시작합니다.", "ok");
+  say($("topStatus"), "새로 시작합니다.", "ok");
 });
 
-let previewTimer = null;
-function renderPreview() {
-  saveDraft();
-  clearTimeout(previewTimer);
-  previewTimer = setTimeout(() => {
-    const title = $("postTitle").value.trim();
-    $("preview").srcdoc =
-      `<!doctype html><meta charset="utf-8">` +
-      `<style>body{font:16px/1.8 -apple-system,"Malgun Gothic",sans-serif;padding:20px;max-width:720px;margin:0 auto;color:#1a202c}` +
-      `img{max-width:100%}h1{font-size:26px}h2{font-size:21px;margin-top:1.6em}h3{font-size:18px}` +
-      `pre{background:#f1f5f9;padding:12px;border-radius:8px;overflow:auto}` +
-      // 남은 빈칸이 눈에 띄어야 채울 마음이 든다.
-      `mark{background:#fef08a}</style>` +
-      (title ? `<h1>${esc(title)}</h1>` : "") +
-      highlightBlanks($("postBody").value);
-  }, 200);
-}
-
-// 미리보기에서만 빈칸을 노랗게 칠한다. 본문 자체는 건드리지 않는다.
-function highlightBlanks(html) {
-  let s = html;
-  for (const b of gemini.BLANKS) s = s.split(b).join(`<mark>${b}</mark>`);
-  s = s.replace(/\[버튼\s*:[^\]]*\]/g, (m) => `<mark>${m}</mark>`);
-  return s;
-}
-
-$("postBody").addEventListener("input", () => { renderPreview(); renderPlaceholders(); });
-$("postTitle").addEventListener("input", renderPreview);
-
-document.querySelectorAll(".tab").forEach((tab) =>
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    tab.classList.add("active");
-    const showPreview = tab.dataset.view === "preview";
-    $("postBody").classList.toggle("hidden", showPreview);
-    $("preview").classList.toggle("hidden", !showPreview);
-    if (showPreview) renderPreview();
-  })
-);
+$("postTitle").addEventListener("input", saveDraft);
 
 // ────────────────────────── 시작 ──────────────────────────
 fillSettingsForm();
 restoreDraft();
-renderPreview();
 renderPlaceholders();
+syncHtmlView();
