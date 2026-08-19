@@ -1,21 +1,14 @@
-// gemini.js — Gemini 로 블로그 초안(텍스트)과 썸네일(이미지)을 만든다.
-// 키를 하나로 통일하려고 글쓰기도 Gemini 로 옮겼다(예전에는 Claude 였다).
+// gemini.js — Gemini 로 블로그 글 "초안"을 만든다.
 //
-// ⚠ 모델 ID 는 자주 갱신된다. 최신 확인:
-//   텍스트  https://ai.google.dev/gemini-api/docs/models
-//   이미지  https://ai.google.dev/gemini-api/docs/image-generation
+// ⚠ 이 도구는 완성된 글을 만들지 않는다. 빈칸을 남기는 것이 목적이다(CLAUDE.md 2장).
+// 프롬프트를 고칠 때 빈칸 4종과 골격을 빼지 말 것.
+//
+// ⚠ 모델 ID 는 자주 갱신된다. 최신 확인: https://ai.google.dev/gemini-api/docs/models
 
-// 2026-08-19 문서 확인: gemini-2.5-flash-image 는 legacy 로 내려갔고 Gemini 3 계열이 현행이다.
-//   gemini-3.1-flash-image      범용 기본값(속도/품질 균형)  ← 지금 쓰는 것
-//   gemini-3.1-flash-lite-image 더 빠르고 싸다
-//   gemini-3-pro-image          복잡한 구성이 필요할 때
-export const IMAGE_MODEL = "gemini-3.1-flash-image";
-
-// 화면의 모델 선택에 그대로 쓰인다.
 // 2026-08-19 무료 한도로 실제 호출해 본 결과가 라벨에 반영되어 있다:
 //   3.1-flash-lite  3~5초에 안정적으로 성공 → 기본값
-//   3.7-flash       503(과부하)이 자주 난다. 재시도해도 안 되면 lite 로 내려서 쓴다.
-//   2.5-pro         429(한도 초과). 무료 한도가 거의 없다.
+//   3.7-flash       503(과부하)이 자주 난다
+//   2.5-pro         429(한도 초과). 무료 한도가 거의 없다
 export const TEXT_MODELS = [
   { id: "gemini-3.1-flash-lite", label: "gemini-3.1-flash-lite (기본, 무료 한도로 잘 됨)" },
   { id: "gemini-3.7-flash", label: "gemini-3.7-flash (고품질, 자주 혼잡함)" },
@@ -23,17 +16,23 @@ export const TEXT_MODELS = [
 ];
 export const TEXT_MODEL_DEFAULT = "gemini-3.1-flash-lite";
 
+// 주제 분야별 말투. CLAUDE.md 3장.
+export const TOPIC_TONES = [
+  { id: "금융", tone: "신중하고 정확하게. 단정하지 말고 조건을 밝힌다." },
+  { id: "창업·정보", tone: "실용적으로. 절차와 준비물을 순서대로 짚는다." },
+  { id: "리뷰", tone: "경험 중심으로. 좋았던 점과 아쉬운 점을 같이 쓴다." },
+  { id: "생활", tone: "친근하게. 어려운 말을 풀어 쓴다." },
+];
+
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const IMAGE_TIMEOUT_MS = 180000;
 const TEXT_TIMEOUT_MS = 180000;
 const TEST_TIMEOUT_MS = 30000;
 
-// 텍스트도 thinking 이 붙어 출력 토큰을 나눠 쓴다. 작게 잡으면 본문이 비거나 잘린다.
+// 텍스트도 thinking 이 출력 토큰을 나눠 쓴다. 작게 잡으면 본문이 비거나 잘린다.
 const MAX_OUTPUT_TOKENS = 16384;
 
 // 429 는 두 가지가 섞여 온다. "잠시 후 재시도"로 풀리는 초당 요청 제한과,
 // 요금제 자체에 한도가 없어서 기다려도 안 풀리는 경우다. 응답 본문으로 구분한다.
-// (무료 한도에서 이미지 생성은 후자였다 — 2026-08-19 확인)
 export function isPlanQuota(bodyText) {
   return /billing|plan|exceeded your current quota/i.test(bodyText || "");
 }
@@ -100,28 +99,61 @@ async function call(args) {
   }
 }
 
-// ────────────────────────── 텍스트 ──────────────────────────
+// ────────────────────────── 프롬프트 ──────────────────────────
 
-function buildPrompt({ keyword, docType, lang }) {
+// 빈칸 4종. 완성도 체크(checks.js)와 같은 목록을 써야 하므로 여기서 내보낸다.
+export const BLANKS = ["[내 경험]", "[실제 수치]", "[내 의견]", "[최신 확인]"];
+
+// 버튼 자리는 생성 단계에서 플레이스홀더로만 둔다. 사람이 텍스트와 URL 을 채운 뒤
+// buttons.js 가 실제 HTML 로 바꾼다.
+export const BUTTON_PLACEHOLDER = "[버튼: 텍스트 | URL]";
+
+export function buildPrompt({ keyword, topic, lang }) {
   const language = lang || "한국어";
-  const typeMap = {
-    유틸리티: "실용적인 방법/사용법 중심",
-    리뷰: "장단점과 사용 경험 중심",
-    정보: "배경지식과 정리 중심",
-    뉴스: "사실 전달과 맥락 중심",
-  };
-  return {
-    system:
-      `당신은 ${language}로 글을 쓰는 블로그 작가입니다. ` +
-      `읽기 쉬운 문단과 소제목으로 구성하고, 과장 없이 구체적으로 씁니다.\n` +
-      `출력 형식을 반드시 지키세요:\n` +
-      `- 첫 줄은 "# 제목" 형식의 글 제목 한 줄\n` +
-      `- 그 다음 줄부터 본문. 소제목은 ## 를 사용\n` +
-      `- 인사말, 설명, 코드펜스로 전체를 감싸는 것 금지. 마크다운 본문만 출력`,
-    user:
-      `주제 키워드: ${keyword}\n글 유형: ${docType} (${typeMap[docType] || ""})\n언어: ${language}\n\n` +
-      `위 주제로 블로그 글을 작성해 주세요.`,
-  };
+  const tone = TOPIC_TONES.find((t) => t.id === topic)?.tone || "";
+
+  const system = [
+    `당신은 ${language}로 쓰는 정보성 블로그 초안 조수입니다.`,
+    `글을 완성하지 마세요. 사람이 채울 빈칸을 일부러 남기는 것이 당신의 역할입니다.`,
+    ``,
+    `[반드시 지킬 것]`,
+    `- 어떤 출처도 그대로 옮기지 말고 완전히 재구성해서 쓰세요.`,
+    `- 확인되지 않은 수치·날짜·금액·상품명·고유명사는 절대 지어내지 마세요.`,
+    `  대신 [실제 수치] 또는 [최신 확인] 으로 비워 두세요.`,
+    `- 아래 빈칸 4종을 본문 안에 실제로 넣으세요(각각 최소 한 번):`,
+    `  [내 경험] — 글쓴이의 실제 경험·사례가 들어갈 자리`,
+    `  [실제 수치] — 확인이 필요한 숫자 자리`,
+    `  [내 의견] — 글쓴이의 판단·정리가 들어갈 자리`,
+    `  [최신 확인] — 발행 시점에 다시 확인해야 하는 정보 자리`,
+    `- 빈칸을 제외한 본문이 최소 1,000자 이상이 되게 쓰세요.`,
+    `- 소제목(##)을 3개 이상 쓰세요.`,
+    tone ? `- 말투: ${tone}` : ``,
+    ``,
+    `[글의 골격] 이 순서를 따르세요.`,
+    `1. 후킹 — 독자의 문제나 궁금증을 먼저 꺼낸다`,
+    `2. 핵심 정보 A — 질문에 대한 실질적인 답. 여기가 글의 가치다. 충분히 쓴다`,
+    `3. ${BUTTON_PLACEHOLDER} — 바로 앞줄에 왜 눌러야 하는지 맥락을 한 줄 쓴다`,
+    `4. [내 경험] 이 들어가는 사례 문단`,
+    `5. 핵심 정보 B — 선택지 비교, 장단점, 판단 근거`,
+    `6. ${BUTTON_PLACEHOLDER} — 마찬가지로 앞줄에 맥락 한 줄`,
+    `7. 주의사항·팁 — [최신 확인] 을 포함한다`,
+    `8. 요약`,
+    ``,
+    `[버튼 규칙]`,
+    `- ${BUTTON_PLACEHOLDER} 를 글자 그대로 2개(길면 3개까지) 넣으세요. 링크를 지어내지 마세요.`,
+    `- 버튼은 반드시 정보를 충분히 준 뒤에 옵니다. 글 맨 앞에 두지 마세요.`,
+    ``,
+    `[출력 형식]`,
+    `- 첫 줄은 "# 제목" 형식의 제목 한 줄`,
+    `- 그 다음 줄부터 마크다운 본문. 소제목은 ## 를 사용`,
+    `- 인사말, 설명, 코드펜스로 전체를 감싸는 것 금지. 마크다운 본문만 출력`,
+  ].filter(Boolean).join("\n");
+
+  const user =
+    `주제 키워드: ${keyword}\n주제 분야: ${topic}\n언어: ${language}\n\n` +
+    `위 주제로 블로그 글 초안을 작성해 주세요. 빈칸을 남기는 것을 잊지 마세요.`;
+
+  return { system, user };
 }
 
 function textBody({ system, user, withSystemField }) {
@@ -143,8 +175,8 @@ function pickText(data) {
     .trim();
 }
 
-export async function generateText({ apiKey, model, keyword, docType, lang }) {
-  const { system, user } = buildPrompt({ keyword, docType, lang });
+export async function generateText({ apiKey, model, keyword, topic, lang }) {
+  const { system, user } = buildPrompt({ keyword, topic, lang });
   const useModel = model || TEXT_MODEL_DEFAULT;
 
   let data;
@@ -175,38 +207,4 @@ export async function testKey({ apiKey, model }) {
     timeoutMs: TEST_TIMEOUT_MS,
   });
   return !!data;
-}
-
-// ────────────────────────── 이미지 ──────────────────────────
-
-function buildImagePrompt({ keyword, style }) {
-  const styleMap = {
-    "포스터 스타일": "bold poster layout, large typography, high contrast",
-    "썸네일 스타일": "youtube-thumbnail style, punchy, centered subject",
-    미니멀: "minimal, flat, lots of negative space",
-    "사진 스타일": "photorealistic, natural lighting, shallow depth of field",
-  };
-  return (
-    `Blog thumbnail image about "${keyword}". ${styleMap[style] || ""}. ` +
-    `16:9 aspect ratio, clean composition, no text artifacts, no watermark.`
-  );
-}
-
-export async function generateImage({ apiKey, keyword, style }) {
-  const data = await call({
-    apiKey,
-    model: IMAGE_MODEL,
-    body: {
-      contents: [{ parts: [{ text: buildImagePrompt({ keyword, style }) }] }],
-      generationConfig: { responseModalities: ["IMAGE"] },
-    },
-    timeoutMs: IMAGE_TIMEOUT_MS,
-  });
-
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const inline = parts.map((p) => p.inlineData || p.inline_data).find((d) => d && d.data);
-  if (!inline) throw new Error("이미지 응답을 찾지 못했습니다. 모델 ID가 최신인지 확인하세요.");
-
-  const mime = inline.mimeType || inline.mime_type || "image/png";
-  return { base64: inline.data, mime, dataUrl: `data:${mime};base64,${inline.data}` };
 }

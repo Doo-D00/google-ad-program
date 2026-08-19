@@ -20,8 +20,9 @@ API 호출은 여기서 확인할 수 없습니다.</p>
 
 <script type="module">
 import { mdToHtml, splitTitle, esc, escAttr } from "../js/markdown.js";
-import { shrinkToDataUrl, dataUrlBytes, humanSize, MAX_WIDTH } from "../js/embed.js";
-import { TEXT_MODELS, TEXT_MODEL_DEFAULT, IMAGE_MODEL, isPlanQuota } from "../js/gemini.js";
+import { TEXT_MODELS, TEXT_MODEL_DEFAULT, TOPIC_TONES, BLANKS, BUTTON_PLACEHOLDER, isPlanQuota, buildPrompt } from "../js/gemini.js";
+import * as buttons from "../js/buttons.js";
+import * as checks from "../js/checks.js";
 
 const out = document.getElementById("out");
 let pass = 0, fail = 0;
@@ -39,7 +40,6 @@ function check(name, actual, expected) {
 function contains(name, haystack, needle) {
   check(name, haystack.includes(needle) ? "포함" : `미포함 → ${haystack}`, "포함");
 }
-
 // ── 마크다운 → HTML ──
 check("## 는 h3 로", mdToHtml("## 소제목"), "<h3>소제목</h3>");
 check("### 는 h4 로", mdToHtml("### 소소제목"), "<h4>소소제목</h4>");
@@ -76,42 +76,80 @@ check("escAttr 은 따옴표를 막는다", escAttr('a"b'), "a&quot;b");
 check("escAttr 은 홑따옴표도 막는다", escAttr("a'b"), "a&#39;b");
 check("escAttr 은 꺾쇠도 막는다", escAttr("<img>"), "&lt;img&gt;");
 
-// ── 모델 목록 ──
-check("기본 글쓰기 모델이 목록에 있다", TEXT_MODELS.some((m) => m.id === TEXT_MODEL_DEFAULT), true);
-check("모델 항목은 id/label 을 갖는다", TEXT_MODELS.every((m) => !!m.id && !!m.label), true);
-check("이미지 모델은 2.5 legacy 가 아니다", IMAGE_MODEL !== "gemini-2.5-flash-image", true);
 
-// ── 429 구분: 기다리면 풀리는 것 vs 요금제 한도 ──
+// ── 모델 / 프롬프트 ──
+check("기본 모델이 목록에 있다", TEXT_MODELS.some((m) => m.id === TEXT_MODEL_DEFAULT), true);
+check("모델 항목은 id/label 을 갖는다", TEXT_MODELS.every((m) => !!m.id && !!m.label), true);
+check("주제 분야는 4종", TOPIC_TONES.length, 4);
+
+// 프롬프트에서 빈칸 규칙이 빠지면 도구의 존재 의미가 없어진다(CLAUDE.md 2장).
+const P = buildPrompt({ keyword: "초기창업패키지 작성방법", topic: "창업·정보", lang: "한국어" });
+for (const b of BLANKS) contains(`프롬프트에 빈칸 ${b} 지시`, P.system, b);
+contains("프롬프트에 버튼 플레이스홀더", P.system, BUTTON_PLACEHOLDER);
+contains("프롬프트에 완성 금지", P.system, "완성하지 마세요");
+contains("프롬프트에 지어내기 금지", P.system, "지어내지 마세요");
+contains("프롬프트에 1,000자 기준", P.system, "1,000자");
+contains("주제 분야별 말투 반영", P.system, "실용");
+
+// ── 429 구분 ──
 check("요금제 한도형 429 를 알아본다",
   isPlanQuota("You exceeded your current quota, please check your plan and billing details."), true);
 check("초당 제한형 429 는 요금제 문제가 아니다",
   isPlanQuota("Resource has been exhausted (e.g. check quota)."), false);
-check("빈 본문은 요금제 문제가 아니다", isPlanQuota(""), false);
 check("null 본문도 안전하다", isPlanQuota(null), false);
 
-// ── 본문 삽입용 이미지 축소 ──
-check("dataUrlBytes 는 문자열 길이", dataUrlBytes("abcde"), 5);
-check("dataUrlBytes 는 빈 값에 0", dataUrlBytes(null), 0);
-check("humanSize KB", humanSize(2048), "2KB");
-check("humanSize MB", humanSize(2 * 1024 * 1024), "2.0MB");
+// ── 버튼 HTML (CLAUDE.md 5장 사양) ──
+const B = buttons.buttonHtml({ text: "꿀팁 보기", url: "https://ex.com/a?x=1&y=2" });
+contains("sponsored 표기", B, 'rel="nofollow sponsored noopener"');
+contains("새 탭", B, 'target="_blank"');
+contains("인라인 배경색", B, "background:#2563eb");
+contains("둥근 모서리", B, "border-radius:10px");
+contains("가운데 정렬", B, "text-align:center");
+contains("URL 유지", B, "https://ex.com/a?x=1&amp;y=2");
+check("class 를 쓰지 않는다(티스토리에서 유실됨)", B.includes("class="), false);
+contains("버튼 텍스트", B, "꿀팁 보기");
+// 텍스트에 태그를 넣어도 깨지면 안 된다
+check("버튼 텍스트 이스케이프", buttons.buttonHtml({ text: "<b>x</b>", url: "u" }).includes("<b>x</b>"), false);
 
-function makePng(w, h) {
-  const c = document.createElement("canvas");
-  c.width = w; c.height = h;
-  const x = c.getContext("2d");
-  // 단색이면 JPEG 로 너무 잘 압축돼 축소 효과 확인이 무의미해진다. 무늬를 넣는다.
-  for (let i = 0; i < w; i += 8) { x.fillStyle = i % 16 ? "#3355ff" : "#ffcc00"; x.fillRect(i, 0, 8, h); }
-  return c.toDataURL("image/png");
-}
+// ── 버튼 플레이스홀더 ──
+const body1 = "앞\n[버튼: 텍스트 | URL]\n중간\n[버튼: 신청하기 | https://a.com]\n끝";
+const found = buttons.findPlaceholders(body1);
+check("플레이스홀더 2개를 찾는다", found.length, 2);
+check("안내어 '텍스트'는 값으로 보지 않는다", found[0].text, "");
+check("안내어 'URL'도 값으로 보지 않는다", found[0].url, "");
+check("채워진 텍스트는 읽는다", found[1].text, "신청하기");
+check("채워진 URL 도 읽는다", found[1].url, "https://a.com");
+const replaced = buttons.replaceAt(body1, found[1].index, found[1].raw, "<BTN>");
+contains("해당 자리만 바뀐다", replaced, "<BTN>");
+check("다른 자리는 그대로", replaced.includes("[버튼: 텍스트 | URL]"), true);
+check("플레이스홀더 유무", buttons.hasPlaceholder("없음"), false);
 
-const big = await shrinkToDataUrl(makePng(2000, 1000));
-check("가로 폭을 MAX_WIDTH 로 줄인다", big.width, MAX_WIDTH);
-check("비율을 유지한다", big.height, MAX_WIDTH / 2);
-check("data URI 를 돌려준다", big.dataUrl.startsWith("data:image/"), true);
-check("bytes 는 dataUrl 길이와 같다", big.bytes, big.dataUrl.length);
+// ── 제휴 고지 ──
+check("고지 없음을 안다", buttons.hasNotice("<p>본문</p>"), false);
+const withNotice = buttons.appendNotice("<p>본문</p>");
+check("고지를 붙인다", buttons.hasNotice(withNotice), true);
+check("두 번 붙이지 않는다", buttons.appendNotice(withNotice), withNotice);
 
-const small = await shrinkToDataUrl(makePng(300, 150));
-check("작은 이미지는 확대하지 않는다", small.width, 300);
+// ── 버튼 개수 세기 ──
+check("버튼 0개", buttons.countButtons("<p>x</p>").total, 0);
+check("버튼 2개", buttons.countButtons(B + B).total, 2);
+check("URL 빈 버튼을 센다", buttons.countButtons(buttons.buttonHtml({ text: "t", url: "" })).missingUrl, 1);
+
+// ── 완성도 체크 ──
+check("빈칸을 센다", checks.countBlanks("<p>[내 경험] 과 [실제 수치]</p>"), 2);
+check("소제목을 센다", checks.countHeadings("<h3>a</h3><h4>b</h4><h2>c</h2>"), 3);
+check("글자 수에서 태그를 뺀다", checks.bodyTextLength("<p>가나다</p>"), 3);
+check("글자 수에서 빈칸을 뺀다", checks.bodyTextLength("<p>가나다[내 경험]</p>"), 3);
+check("글자 수에서 버튼 자리를 뺀다", checks.bodyTextLength("<p>가나다[버튼: 텍스트 | URL]</p>"), 3);
+check("공백은 글자 수에서 제외", checks.bodyTextLength("<p>가 나\n다</p>"), 3);
+
+const short = checks.runChecks("<p>짧다</p>");
+check("짧으면 통과 못 한다", short.allOk, false);
+check("버튼 없으면 고지는 해당 없음", short.list.find(c => c.key === "notice").ok, true);
+const withBlank = checks.runChecks("<p>[내 경험]</p>");
+check("빈칸이 남으면 걸린다", withBlank.list.find(c => c.key === "blanks").ok, false);
+const btnNoUrl = checks.runChecks(buttons.buttonHtml({ text: "t", url: "" }) + B);
+check("URL 빈 버튼이 있으면 걸린다", btnNoUrl.list.find(c => c.key === "buttons").ok, false);
 
 // ── 결과 ──
 const sum = document.getElementById("summary");

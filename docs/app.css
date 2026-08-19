@@ -71,7 +71,6 @@ details>button{width:100%;margin-top:12px}
 .status{min-height:18px;margin:8px 0 0;font-size:12px;white-space:pre-wrap}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}.loading{color:var(--brand)}
 
-#thumbPreview img{max-width:100%;border-radius:8px;margin-top:10px;border:1px solid var(--line)}
 
 /* 편집/미리보기 */
 .tabs{display:flex;gap:6px;margin:12px 0 8px}
@@ -90,3 +89,17 @@ dialog h3{margin:18px 0 0;font-size:14px;color:var(--brand)}
 dialog menu{display:flex;justify-content:flex-end;gap:8px;margin:18px 0 0;padding:0}
 .titlerow{display:flex;align-items:center;justify-content:space-between;gap:8px}
 button.tiny{padding:3px 10px;font-size:12px;color:var(--muted)}
+
+/* 발행 전 점검 */
+.checks{list-style:none;margin:10px 0 0;padding:0;font-size:12px}
+.checks li{padding:3px 0;white-space:pre-wrap}
+.checks li.ok{color:var(--ok)}
+.checks li.warn{color:var(--warn)}
+
+/* 버튼 자리(플레이스홀더) 입력 */
+.ph{border:1px solid var(--line);border-radius:8px;padding:10px;margin:8px 0}
+.ph label{font-weight:700;color:var(--brand)}
+.ph input{margin:4px 0}
+.ph button{width:100%;margin-top:6px}
+#phList .hint{margin:6px 0 0}
+details hr{border:none;border-top:1px solid var(--line);margin:14px 0}

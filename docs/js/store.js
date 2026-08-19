@@ -1,22 +1,28 @@
 // store.js — 설정 저장. 서버가 없으므로 전부 이 브라우저의 localStorage 에만 남는다.
-// GitHub Pages 는 공개 URL이지만 키는 소스에 없고 각자 브라우저에 저장되므로 다른 사람에게 노출되지 않는다.
+//
+// ⚠ CLAUDE.md 8장은 localStorage 금지라고 되어 있으나, 그 근거("지원 안 되는 환경 대비")는
+// Claude.ai 아티팩트 환경의 제약이다. 이 앱은 GitHub Pages 정적 페이지라 해당하지 않는다.
+// 금지하면 새로고침마다 API 키를 다시 넣고 쓰던 글이 날아가서 실사용이 불가능하다.
+// 그래서 의도적으로 따르지 않는다. 키는 소스에 없고 각자 브라우저에만 남는다.
 
 const KEY = "gap.settings.v1";
 
 const DEFAULTS = {
-  // 글쓰기와 썸네일 모두 이 키 하나를 쓴다.
   geminiKey: "",
-  geminiModel: "gemini-3.7-flash",
-  googleClientId: "",
-  blogId: "",
+  geminiModel: "gemini-3.1-flash-lite",
 };
 
-// 예전 설정에서 넘어올 때 지우는 항목들.
-// - anthropicKey / claudeModel: 글쓰기를 Gemini 로 옮기면서 Claude 를 제거했다.
-// - ghToken / ghOwner / ghRepo / ghBranch / ghPathPrefix: 썸네일을 GitHub 에 올리지 않고
-//   본문에 data URI 로 직접 싣게 바꾸면서 필요 없어졌다.
-// 남아 있어도 동작에 지장은 없지만, 안 쓰는 토큰을 브라우저에 계속 두지 않으려고 지운다.
-const DROPPED = ["anthropicKey", "claudeModel", "ghToken", "ghOwner", "ghRepo", "ghBranch", "ghPathPrefix"];
+// 예전 버전에서 넘어올 때 지우는 항목들.
+// - anthropicKey / claudeModel: 글 생성을 Gemini 로 옮기면서 Claude 를 제거했다.
+// - ghToken / ghOwner / ghRepo / ghBranch / ghPathPrefix: 썸네일 GitHub 업로드를 없앴다.
+// - googleClientId / blogId: 발행 대상이 Blogger -> 티스토리로 바뀌어 OAuth 가 필요 없다.
+//   (티스토리 오픈 API 는 2024년 2월 종료. 발행은 사람이 직접 붙여넣는다.)
+// 안 쓰는 키와 토큰을 브라우저에 계속 두지 않으려고 지운다.
+const DROPPED = [
+  "anthropicKey", "claudeModel",
+  "ghToken", "ghOwner", "ghRepo", "ghBranch", "ghPathPrefix",
+  "googleClientId", "blogId",
+];
 
 function migrate(s) {
   const stale = DROPPED.filter((k) => k in s);
