@@ -72,6 +72,24 @@ $("testGemini").addEventListener("click", async () => {
 });
 
 // ────────────────────────── 1. 초안 생성 ──────────────────────────
+// 무료 한도에서는 고품질 모델이 자주 503(과부하)이다. gemini.js 가 두 번 재시도해도
+// 안 되면 기본 모델로 한 번 더 시도한다. 사용자에게는 바꿔서 만들었다고 알린다.
+async function generateWithFallback({ keyword, topic, lang }) {
+  const chosen = settings.geminiModel || gemini.TEXT_MODEL_DEFAULT;
+  const args = { apiKey: settings.geminiKey, keyword, topic, lang };
+
+  try {
+    return { ...(await gemini.generateText({ ...args, model: chosen })), usedModel: chosen, fellBack: false };
+  } catch (e) {
+    const congested = e?.status === 503 || e?.status === 500;
+    if (!congested || chosen === gemini.TEXT_MODEL_DEFAULT) throw e;
+
+    say($("textStatus"), `${chosen} 이 혼잡합니다. ${gemini.TEXT_MODEL_DEFAULT} 로 다시 시도 중…`, "loading");
+    const r = await gemini.generateText({ ...args, model: gemini.TEXT_MODEL_DEFAULT });
+    return { ...r, usedModel: gemini.TEXT_MODEL_DEFAULT, fellBack: true };
+  }
+}
+
 $("genText").addEventListener("click", async () => {
   const btn = $("genText");
   const keyword = $("kw").value.trim();
@@ -81,12 +99,8 @@ $("genText").addEventListener("click", async () => {
   busy(btn, true, "생성 중…");
   say($("textStatus"), "생성 중… (모델에 따라 1분 이상 걸릴 수 있습니다)", "loading");
   try {
-    const { text, truncated } = await gemini.generateText({
-      apiKey: settings.geminiKey,
-      model: settings.geminiModel || gemini.TEXT_MODEL_DEFAULT,
-      keyword,
-      topic: $("topic").value,
-      lang: $("lang").value,
+    const { text, truncated, usedModel, fellBack } = await generateWithFallback({
+      keyword, topic: $("topic").value, lang: $("lang").value,
     });
     lastMarkdown = text;
     const { title, body } = splitTitle(text);
@@ -94,7 +108,11 @@ $("genText").addEventListener("click", async () => {
     $("postBody").value = mdToHtml(body || text);
     renderPreview();
     renderPlaceholders();
-    say($("textStatus"), truncated ? "완료 (길이 제한으로 잘렸을 수 있습니다)" : "완료 — 빈칸을 채우세요", truncated ? "warn" : "ok");
+
+    const note = fellBack ? `\n(고른 모델이 혼잡해서 ${usedModel} 로 생성했습니다)` : "";
+    say($("textStatus"),
+      (truncated ? "완료 (길이 제한으로 잘렸을 수 있습니다)" : "완료 — 빈칸을 채우세요") + note,
+      truncated || fellBack ? "warn" : "ok");
   } catch (e) {
     say($("textStatus"), e.message, "err");
   } finally {
