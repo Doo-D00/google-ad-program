@@ -81,8 +81,10 @@
          data-placeholder="왼쪽에서 [초안 만들기]를 누르면 여기에 글이 들어옵니다. 여기서 바로 고쳐 쓰시면 됩니다."></div>
 
     <details class="sub advanced">
-      <summary>HTML 보기 (필요할 때만)</summary>
-      <p class="hint">티스토리 HTML 모드에 직접 붙여넣고 싶을 때만 쓰세요. 평소에는 볼 필요 없습니다.</p>
+      <summary>붙여넣기가 잘 안 될 때</summary>
+      <p class="hint">티스토리가 버튼 모양을 지워버리면, 아래 버튼으로 복사한 뒤
+        티스토리 글쓰기에서 <b>기본모드 → HTML</b> 로 바꾸고 붙여넣으세요.</p>
+      <button type="button" id="copyRaw">HTML로 복사하기</button>
       <textarea id="htmlView" rows="8" spellcheck="false" readonly></textarea>
     </details>
   </section>

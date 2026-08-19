@@ -214,40 +214,97 @@ $("runCheck").addEventListener("click", renderChecks);
 
 // ────────────────────────── 4. 내보내기 ──────────────────────────
 // 서식이 살아 있는 상태로 복사한다. 그래야 티스토리 기본 편집기에 그냥 붙여넣어도
-// 버튼과 소제목이 그대로 살아난다(HTML 모드로 들어갈 필요가 없다).
-async function copyRich(html) {
+// 버튼과 소제목이 살아난다(HTML 모드로 들어갈 필요가 없다).
+//
+// 화면 밖에 임시 영역을 만들어 그걸 선택해서 복사한다. 이유가 두 가지다.
+// 1) 브라우저가 서식(text/html)과 글자(text/plain)를 알아서 둘 다 만들어 준다.
+//    직접 만들면 글자 쪽에 HTML 태그가 그대로 들어가, 붙여넣었을 때 태그가 보인다.
+// 2) 화면의 글을 그대로 선택하면 노란 빈칸 칠까지 복사된다.
+function copyViaSelection(html) {
+  const holder = document.createElement("div");
+  holder.contentEditable = "true";
+  // display:none 이면 선택이 안 된다. 화면 밖으로 밀어낸다.
+  holder.style.cssText = "position:fixed;left:-9999px;top:0;width:600px;opacity:0;";
+  holder.innerHTML = html;
+  document.body.appendChild(holder);
+
+  const sel = window.getSelection();
+  const saved = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  let ok = false;
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(holder);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    ok = document.execCommand("copy");
+  } catch (_) { /* 아래에서 최신 방식으로 한 번 더 */ }
+
+  sel.removeAllRanges();
+  if (saved) sel.addRange(saved);
+  holder.remove();
+  return ok;
+}
+
+async function copyRich(html, plain) {
+  if (copyViaSelection(html)) return true;
+
+  // 위가 막히면 최신 방식으로 한 번 더. 이때는 글자 쪽을 직접 만들어 줘야 한다.
   try {
     if (window.ClipboardItem && navigator.clipboard?.write) {
       await navigator.clipboard.write([new ClipboardItem({
         "text/html": new Blob([html], { type: "text/html" }),
-        "text/plain": new Blob([html], { type: "text/plain" }),
+        "text/plain": new Blob([plain], { type: "text/plain" }),
       })]);
       return true;
     }
-  } catch (_) { /* 아래 방식으로 넘어간다 */ }
+  } catch (_) { /* 실패로 처리한다 */ }
 
-  // 예전 방식: 화면의 글을 통째로 선택해서 복사한다. 서식이 함께 복사된다.
-  try {
-    const sel = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(bodyEl());
-    sel.removeAllRanges();
-    sel.addRange(range);
-    const ok = document.execCommand("copy");
-    sel.removeAllRanges();
-    return ok;
-  } catch (_) {
-    return false;
-  }
+  return false;
 }
 
 $("copyHtml").addEventListener("click", async () => {
   const html = getBody().trim();
   if (!html) return say($("topStatus"), "아직 글이 없습니다.", "warn");
-  const ok = await copyRich(html);
+
+  const ok = await copyRich(html, bodyEl().innerText);
+  if (ok) {
+    say($("topStatus"), "복사했습니다. 티스토리 글쓰기에서 붙여넣기(Ctrl+V) 하세요.", "ok");
+    return;
+  }
+
+  // 그래도 안 되면 사용자가 직접 복사할 수 있게 글을 선택해 준다.
+  bodyEl().focus();
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(bodyEl());
+  sel.removeAllRanges();
+  sel.addRange(range);
+  say($("topStatus"), "자동 복사가 막혔습니다. 글이 선택돼 있으니 Ctrl+C 를 눌러 주세요.", "warn");
+});
+
+// 티스토리가 붙여넣기 때 버튼 스타일을 지워버리는 경우가 있다. 그때는 HTML 모드에
+// 원문을 그대로 넣어야 한다. 이건 글자(text/plain)로 복사해야 한다 — 서식으로 넣으면
+// HTML 모드 입력칸에 태그가 아니라 렌더된 글이 들어간다.
+$("copyRaw").addEventListener("click", async () => {
+  const html = getBody().trim();
+  if (!html) return say($("topStatus"), "아직 글이 없습니다.", "warn");
+
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(html);
+    ok = true;
+  } catch (_) {
+    const ta = $("htmlView");
+    ta.removeAttribute("readonly");
+    ta.focus();
+    ta.select();
+    try { ok = document.execCommand("copy"); } catch (_) {}
+    ta.setAttribute("readonly", "");
+  }
+
   say($("topStatus"),
-    ok ? "복사했습니다. 티스토리 글쓰기에서 붙여넣기(Ctrl+V) 하세요."
-       : "복사가 막혔습니다. 글을 직접 선택해서 Ctrl+C 로 복사해 주세요.",
+    ok ? "HTML 로 복사했습니다. 티스토리 글쓰기에서 [기본모드]를 [HTML]로 바꾸고 붙여넣으세요."
+       : "복사가 막혔습니다. 아래 칸의 글을 직접 선택해 Ctrl+C 하세요.",
     ok ? "ok" : "warn");
 });
 
