@@ -507,8 +507,10 @@ function renderPreview() {
   previewTimer = setTimeout(() => {
     const title = $("postTitle").value.trim();
     // 미리보기는 실제 발행 모습이어야 하므로 노란 칠을 벗긴 상태로 보여준다.
+    // <base target="_blank"> — 링크를 눌렀을 때 미리보기 자체가 딴 페이지로 바뀌지 않고
+    // 새 탭에서 열린다. 버튼이 진짜로 동작하는지 여기서 확인할 수 있어야 한다.
     $("preview").srcdoc =
-      `<!doctype html><meta charset="utf-8">` +
+      `<!doctype html><meta charset="utf-8"><base target="_blank">` +
       `<style>body{font:16px/1.85 -apple-system,"Malgun Gothic",sans-serif;padding:24px;max-width:720px;` +
       `margin:0 auto;color:#1a202c}img{max-width:100%}h1{font-size:26px}h2{font-size:22px;margin-top:1.6em}` +
       `h3{font-size:19px;margin-top:1.6em}p{margin:0 0 1em}` +
