@@ -3,29 +3,27 @@
 
 const KEY = "gap.settings.v1";
 
-// 2026-08 계정 이름 변경: Doo-D00 → dev-doo. 옛 이름은 이미 남에게 풀려 있으므로 그대로 두면 위험하다.
-const OLD_OWNER = "doo-d00";
-
 const DEFAULTS = {
-  anthropicKey: "",
-  claudeModel: "claude-sonnet-5",
+  // 글쓰기와 썸네일 모두 이 키 하나를 쓴다.
   geminiKey: "",
+  geminiModel: "gemini-3.7-flash",
   googleClientId: "",
   blogId: "",
-  ghToken: "",
-  // 이미지 저장소 기본값은 이 리포. 공개 리포라 jsDelivr 가 그대로 서빙한다.
-  // 다른 리포를 쓰려면 설정에서 바꾸면 된다(브랜치 이름 주의 — 이 리포는 master).
-  ghOwner: "dev-doo",
-  ghRepo: "google-ad-program",
-  ghBranch: "master",
-  ghPathPrefix: "images",
 };
 
-// 이름 변경 전에 저장해둔 설정이 브라우저에 남아 있으면 업로드가 404 로 깨진다.
-// 옛 owner 일 때만 새 이름으로 갈아끼운다 — 다른 리포를 쓰고 있으면 건드리지 않는다.
+// 예전 설정에서 넘어올 때 지우는 항목들.
+// - anthropicKey / claudeModel: 글쓰기를 Gemini 로 옮기면서 Claude 를 제거했다.
+// - ghToken / ghOwner / ghRepo / ghBranch / ghPathPrefix: 썸네일을 GitHub 에 올리지 않고
+//   본문에 data URI 로 직접 싣게 바꾸면서 필요 없어졌다.
+// 남아 있어도 동작에 지장은 없지만, 안 쓰는 토큰을 브라우저에 계속 두지 않으려고 지운다.
+const DROPPED = ["anthropicKey", "claudeModel", "ghToken", "ghOwner", "ghRepo", "ghBranch", "ghPathPrefix"];
+
 function migrate(s) {
-  if (String(s.ghOwner || "").toLowerCase() !== OLD_OWNER) return s;
-  return { ...s, ghOwner: DEFAULTS.ghOwner };
+  const stale = DROPPED.filter((k) => k in s);
+  if (!stale.length) return s;
+  const next = { ...s };
+  for (const k of stale) delete next[k];
+  return next;
 }
 
 export function load() {

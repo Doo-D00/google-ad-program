@@ -1,11 +1,11 @@
 // app.js — 화면 조립 + 흐름 제어.
-// 키워드 → 초안 생성 → 썸네일 생성/업로드 → 버튼 삽입 → 게시.
+// 키워드 → 초안 생성 → 썸네일 생성/삽입 → 버튼 삽입 → 게시.
+// 글쓰기와 썸네일 모두 Gemini 키 하나로 돈다.
 
 import * as store from "./store.js";
 import { mdToHtml, splitTitle, esc, escAttr } from "./markdown.js";
-import * as claude from "./claude.js";
 import * as gemini from "./gemini.js";
-import * as github from "./github.js";
+import * as embed from "./embed.js";
 import * as blogger from "./blogger.js";
 
 const $ = (id) => document.getElementById(id);
@@ -30,13 +30,18 @@ let lastImage = null; // { base64, mime, dataUrl }
 
 // ────────────────────────── 설정 ──────────────────────────
 const SETTING_FIELDS = {
-  sAnthropicKey: "anthropicKey", sClaudeModel: "claudeModel", sGeminiKey: "geminiKey",
-  sGoogleClientId: "googleClientId", sGhToken: "ghToken", sGhOwner: "ghOwner",
-  sGhRepo: "ghRepo", sGhBranch: "ghBranch", sGhPathPrefix: "ghPathPrefix",
+  sGeminiKey: "geminiKey", sGeminiModel: "geminiModel", sGoogleClientId: "googleClientId",
 };
+
+// 모델 목록은 gemini.js 가 갖고 있다. 모델이 바뀌어도 HTML 을 안 고치도록 여기서 채운다.
+$("sGeminiModel").innerHTML = gemini.TEXT_MODELS
+  .map((m) => `<option value="${escAttr(m.id)}">${esc(m.label)}</option>`)
+  .join("");
 
 function fillSettingsForm() {
   for (const [id, key] of Object.entries(SETTING_FIELDS)) $(id).value = settings[key] || "";
+  // 저장된 모델이 목록에서 사라졌으면 기본값으로 돌린다.
+  if (!$("sGeminiModel").value) $("sGeminiModel").value = gemini.TEXT_MODEL_DEFAULT;
 }
 
 $("settingsBtn").addEventListener("click", () => { fillSettingsForm(); $("settingsDlg").showModal(); });
@@ -48,17 +53,17 @@ $("saveSettings").addEventListener("click", () => {
   say($("topStatus"), "설정을 저장했습니다.", "ok");
 });
 
-$("testClaude").addEventListener("click", async () => {
-  const btn = $("testClaude");
-  const apiKey = $("sAnthropicKey").value.trim();
-  const model = $("sClaudeModel").value;
-  if (!apiKey) return say($("settingsStatus"), "Anthropic 키를 입력하세요.", "err");
+$("testGemini").addEventListener("click", async () => {
+  const btn = $("testGemini");
+  const apiKey = $("sGeminiKey").value.trim();
+  const model = $("sGeminiModel").value;
+  if (!apiKey) return say($("settingsStatus"), "Gemini 키를 입력하세요.", "err");
   busy(btn, true, "테스트 중…");
   say($("settingsStatus"), `테스트 중… (${model})`, "loading");
   try {
-    await claude.testKey({ apiKey, model });
+    await gemini.testKey({ apiKey, model });
     // 테스트만 하고 [닫기] 를 누르면 키가 날아간다. 성공했으면 바로 저장해 준다.
-    settings = store.save({ anthropicKey: apiKey, claudeModel: model });
+    settings = store.save({ geminiKey: apiKey, geminiModel: model });
     say($("settingsStatus"), `성공! ${model} 키가 정상입니다. (저장했습니다)`, "ok");
   } catch (e) {
     say($("settingsStatus"), "실패: " + e.message, "err");
@@ -72,14 +77,14 @@ $("genText").addEventListener("click", async () => {
   const btn = $("genText");
   const keyword = $("kw").value.trim();
   if (!keyword) return say($("textStatus"), "키워드를 입력하세요.", "warn");
-  if (!settings.anthropicKey) return say($("textStatus"), "설정에서 Anthropic 키를 먼저 저장하세요.", "err");
+  if (!settings.geminiKey) return say($("textStatus"), "설정에서 Gemini 키를 먼저 저장하세요.", "err");
 
   busy(btn, true, "생성 중…");
   say($("textStatus"), "생성 중… (모델에 따라 1분 이상 걸릴 수 있습니다)", "loading");
   try {
-    const { text, truncated } = await claude.generate({
-      apiKey: settings.anthropicKey,
-      model: settings.claudeModel || "claude-sonnet-5",
+    const { text, truncated } = await gemini.generateText({
+      apiKey: settings.geminiKey,
+      model: settings.geminiModel || gemini.TEXT_MODEL_DEFAULT,
       keyword,
       docType: $("docType").value,
       lang: $("lang").value,
@@ -130,33 +135,27 @@ $("saveImage").addEventListener("click", () => {
   a.click();
 });
 
+// 외부 호스팅 없이 본문 HTML 안에 data URI 로 직접 싣는다.
+// 원본 그대로는 글이 너무 커지므로 embed.js 가 폭을 줄이고 JPEG 로 다시 인코딩한다.
 $("insertImage").addEventListener("click", async () => {
   const btn = $("insertImage");
   if (!lastImage) return;
-  const need = store.missing(settings, ["ghToken", "ghOwner", "ghRepo"]);
-  if (need.length) {
-    return say($("imgStatus"), `설정에서 GitHub 항목이 비어 있습니다: ${need.join(", ")}`, "err");
-  }
 
   const keyword = $("kw").value.trim() || "thumbnail";
-  busy(btn, true, "업로드 중…");
-  say($("imgStatus"), "GitHub 에 업로드 중…", "loading");
+  busy(btn, true, "처리 중…");
+  say($("imgStatus"), "이미지 크기를 줄이는 중…", "loading");
   try {
-    const path = github.buildPath({ prefix: settings.ghPathPrefix, keyword, mime: lastImage.mime });
-    const r = await github.upload({
-      token: settings.ghToken,
-      owner: settings.ghOwner,
-      repo: settings.ghRepo,
-      branch: settings.ghBranch || "main",
-      path,
-      base64: lastImage.base64,
-      message: `thumbnail: ${keyword}`,
-    });
+    const r = await embed.shrinkToDataUrl(lastImage.dataUrl);
     // 이미지 자체에 정렬을 준다 — 래퍼 div 는 편집기/테마에 따라 사라질 수 있다.
     insertIntoBody(
-      `<img src="${escAttr(r.cdnUrl)}" alt="${escAttr(keyword)}" style="display:block;margin:0 auto;max-width:100%" />`
+      `<img src="${escAttr(r.dataUrl)}" alt="${escAttr(keyword)}" style="display:block;margin:0 auto;max-width:100%" />`
     );
-    say($("imgStatus"), `업로드 완료 — 본문에 삽입했습니다.\n${r.cdnUrl}`, "ok");
+    const size = embed.humanSize(r.bytes);
+    if (r.bytes > embed.WARN_BYTES) {
+      say($("imgStatus"), `본문에 삽입했습니다 (${r.width}×${r.height}, ${size}). 용량이 커서 게시가 거부될 수 있습니다 — 실패하면 [이미지 저장]으로 내려받아 Blogger 편집기에서 직접 넣으세요.`, "warn");
+    } else {
+      say($("imgStatus"), `본문에 삽입했습니다 (${r.width}×${r.height}, ${size}).`, "ok");
+    }
   } catch (e) {
     say($("imgStatus"), e.message, "err");
   } finally {

@@ -18,10 +18,15 @@
 > 확장 버전은 `src/` 에 남아 있으나 **더 이상 쓰지 않는다**(9번 참고).
 
 ## 2. 기능
-1. **AI 글쓰기 (Claude)** — 키워드 + 글 유형 + 언어 → 제목/본문 초안. 마크다운을 HTML로 변환해 넣는다.
-2. **AI 썸네일 (Gemini)** — 키워드 + 스타일 → 이미지 생성 → GitHub 업로드 → 본문에 `<img>` 삽입.
+1. **AI 글쓰기 (Gemini)** — 키워드 + 글 유형 + 언어 → 제목/본문 초안. 마크다운을 HTML로 변환해 넣는다.
+2. **AI 썸네일 (Gemini)** — 키워드 + 스타일 → 이미지 생성 → 축소 → 본문에 data URI `<img>` 삽입.
 3. **버튼 만들기** — 텍스트/링크/색 → 본문 커서 위치에 버튼 HTML 삽입.
 4. **게시 (Blogger API)** — 우측 상단 버튼. 기본은 **초안**, 체크 해제 시 공개 발행(한 번 더 확인).
+
+> **사용자가 넣어야 하는 값은 두 개뿐이다: Gemini API 키, OAuth 클라이언트 ID.**
+> 2026-08-19 에 키를 Gemini 하나로 통일했다. 사용자가 Anthropic 키와 GitHub 토큰을 발급하지
+> 못해서, 글쓰기를 Claude → Gemini 로 옮기고 이미지 호스팅(GitHub)을 없앴다.
+> 게시는 Google 로그인(OAuth)이라 애초에 키가 필요 없다.
 
 ## 3. 아키텍처
 ```
@@ -30,23 +35,25 @@ docs/app.css          스타일 (앱 셸: 좌 도구 패널 / 우 본문+미리�
 docs/js/app.js        흐름 제어. 버튼 핸들러, 커서 삽입, 미리보기, 게시
 docs/js/store.js      설정 저장 (localStorage). 키는 소스에 없다
 docs/js/markdown.js   마크다운 → HTML, 첫 줄 "# 제목" 분리, esc/escAttr
-docs/js/claude.js     Anthropic Messages API
-docs/js/gemini.js     Gemini 이미지 생성
-docs/js/github.js     이미지 업로드 → jsDelivr URL
+docs/js/gemini.js     Gemini 텍스트 생성 + 이미지 생성 (키 하나로 둘 다)
+docs/js/embed.js      이미지를 본문에 넣기 전 캔버스로 축소 → JPEG data URI
 docs/js/blogger.js    Google 로그인(GIS) + Blogger API v3 발행
 dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 ```
 외부 의존성은 Google 로그인 스크립트(`accounts.google.com/gsi/client`) 하나뿐. 나머지는 순수 JS.
 
 ## 4. 외부 API 레퍼런스
-### Claude (텍스트)
-- POST `https://api.anthropic.com/v1/messages`
-- 헤더: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type`,
-  브라우저 직접 호출 허용용 `anthropic-dangerous-direct-browser-access: true`
-- 모델: `claude-sonnet-5`(기본) / `claude-haiku-4-5` / `claude-opus-5`
-- `max_tokens` 는 넉넉히(16000). sonnet-5/opus-5 는 thinking 이 기본 ON 이고 thinking 토큰도
-  max_tokens 를 소모해서, 작게 잡으면 본문이 비거나 잘린다.
-- `output_config.effort` 는 sonnet-5/opus-5 만 지원. haiku-4-5 에 주면 400.
+### Gemini (텍스트)
+- POST `https://generativelanguage.googleapis.com/v1beta/models/<MODEL>:generateContent`
+- 헤더 `x-goog-api-key`
+- 바디: `{"systemInstruction":{"parts":[{"text":"..."}]},"contents":[{"role":"user","parts":[{"text":"..."}]}],`
+  `"generationConfig":{"maxOutputTokens":16384}}`
+- 응답: `candidates[0].content.parts[].text` (thought 파트는 제외), `finishReason`,
+  차단 시 `promptFeedback.blockReason`
+- 모델(2026-08-19): `gemini-3.7-flash`(기본) / `gemini-3.1-flash-lite`(싸고 빠름) / `gemini-2.5-pro`(고품질)
+- `maxOutputTokens` 는 넉넉히. Gemini 3 도 thinking 이 출력 토큰을 나눠 쓰므로 작게 잡으면 본문이 빈다.
+- **`systemInstruction` 을 거부하면 지시를 본문 앞에 붙여 한 번 재시도한다**(`gemini.js` 참고).
+  형식이 바뀌어도 조용히 죽지 않게 하려는 안전장치다.
 
 ### Gemini (이미지)
 - POST `https://generativelanguage.googleapis.com/v1beta/models/<MODEL>:generateContent`
@@ -64,21 +71,23 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 - 스코프: `https://www.googleapis.com/auth/blogger`
 - 인증: GIS 토큰 방식(`google.accounts.oauth2.initTokenClient`). **클라이언트 시크릿 불필요.**
 
-### GitHub (이미지 호스팅)
-- PUT `https://api.github.com/repos/{owner}/{repo}/contents/{path}` — 바디 `{message, content(base64), branch}`
-- 결과 URL: `https://cdn.jsdelivr.net/gh/{owner}/{repo}@{branch}/{path}`
-
 ## 5. 빌드 단계
 - [x] **W0. 뼈대** — 화면, 설정 저장, 커서 삽입, 미리보기. (버튼 삽입/미리보기는 실제 브라우저 검증 완료)
-- [ ] **W1. 글쓰기** — 실제 Claude 키로 생성 확인. 프롬프트/말투 다듬기.
-- [ ] **W2. 썸네일** — ~~Gemini 모델 ID 최신화~~(완료) → 생성 → GitHub 업로드 → 본문 삽입 확인.
+- [ ] **W1. 글쓰기** — 실제 Gemini 키로 생성 확인. 프롬프트/말투 다듬기.
+- [ ] **W2. 썸네일** — ~~모델 ID 최신화~~(완료) → 생성 → ~~축소/삽입~~(selftest 통과) → 실제 키로 확인.
 - [ ] **W3. 게시** — ~~Cloud Console 설정(SETUP.md)~~(완료) → 로그인 → 초안 게시 → 공개 발행 확인.
-      브라우저 CORS 는 통과 확인됨(8번 참고). 남은 건 실제 토큰으로 되는지다.
+      브라우저 CORS 는 통과 확인됨(8번 참고). **data URI 이미지를 Blogger 가 받아주는지는 미검증** ↓
 - [ ] **W4. 다듬기** — 라벨(태그) 입력, 이미지 여러 장, 초안 불러와 수정, 히스토리 등.
 
 ## 6. 알려진 함정 / 주의
-- **Blogger API v3 에는 이미지 업로드 엔드포인트가 없다.** 본문에 `<img src="...">` 로만 넣을 수 있어
-  이미지를 외부에 호스팅해야 한다. 그래서 GitHub + jsDelivr 를 쓴다. **jsDelivr 는 공개 리포만 서빙한다.**
+- **Blogger API v3 에는 이미지 업로드 엔드포인트가 없다.** 본문에 `<img src="...">` 로만 넣을 수 있다.
+  예전에는 GitHub + jsDelivr 로 호스팅했지만, 키를 Gemini 하나로 통일하면서 **본문에 data URI 로
+  직접 싣는 방식**으로 바꿨다(`embed.js`). 원본을 그대로 실으면 글이 몇 MB 가 되므로 가로 1200px /
+  JPEG 로 줄여서 넣는다.
+- ⚠ **data URI 를 Blogger 가 받아주는지는 아직 실제로 확인하지 않았다.** 거부되거나 용량 제한에
+  걸리면 [이미지 저장]으로 내려받아 Blogger 편집기에서 직접 넣는 경로로 안내한다(버튼은 이미 있다).
+  그것도 아니면 GitHub 업로드를 되살린다 — 지운 코드는 `docs/js/github.js` 로 git 이력에 있다
+  (커밋 `3b92411` 시점).
 - **`file://` 로 열면 안 된다.** ES 모듈과 OAuth 원본 검사가 동작하지 않는다. 반드시 http 로 띄운다.
 - **OAuth 승인된 JavaScript 원본**에 실제 사용할 주소를 모두 등록해야 한다
   (`https://dev-doo.github.io`, `http://localhost:8765`).
@@ -99,8 +108,12 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 **2026-08-19 GitHub 계정 이름 변경: `Doo-D00` → `dev-doo`**
 앱 주소가 `https://dev-doo.github.io/google-ad-program/` 로 바뀌었다. 옛 주소는 404 다
 (GitHub 는 리포 URL 은 리다이렉트해주지만 Pages 주소는 안 해준다). 리모트 URL, 커밋 이메일,
-문서, `store.js` 의 `ghOwner` 기본값은 갱신 완료. 브라우저에 옛 owner 가 저장돼 있으면
-`store.js` 의 `migrate()` 가 읽을 때 한 번 갈아끼운다.
+문서는 갱신 완료.
+**2026-08-19 키를 Gemini 하나로 통일**
+사용자가 Anthropic 키와 GitHub 토큰을 발급하지 못해, 글쓰기를 Claude → Gemini 로 옮기고
+(`claude.js` 삭제) 이미지 호스팅을 없앴다(`github.js` 삭제, `embed.js` 로 data URI 삽입).
+설정에 남아 있던 옛 키(`anthropicKey`, `ghToken` 등)는 `store.js` 의 `migrate()` 가 읽을 때
+한 번 지운다 — 안 쓰는 토큰을 브라우저에 남기지 않으려는 것이다.
 **Cloud Console 설정 완료(2026-08-19)**: OAuth 클라이언트는 이름 변경으로 깨진 게 아니라 애초에
 없었다. 이번에 프로젝트 `pivotal-bonbon-471106-n0` 에 Blogger API v3 사용 설정, 동의 화면(외부/
 테스트 중, 테스트 사용자 `doosw02@gmail.com`), 웹 클라이언트(원본 `https://dev-doo.github.io`,
@@ -111,11 +124,14 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 - 화면 로딩(콘솔 에러 없음), 커서 위치 버튼 삽입, 미리보기 렌더
 - 미리보기 iframe 샌드박스 — 주입한 `<script>` 가 실행되지 않음
 - 초안 자동 저장/복원, 빈 값으로 덮어쓰지 않음
-- `dev/selftest.html` 28건 통과 (로컬 + Pages 양쪽)
+- `dev/selftest.html` 35건 통과 (이미지 축소 로직 포함)
+- 설정 마이그레이션 — 옛 `anthropicKey`/`ghToken` 이 실제로 지워지고 Gemini 키/클라이언트 ID 는 남음
+- Gemini 텍스트 3개 모델 모두 잘못된 키로 호출 시 401/400 이 읽힘(엔드포인트·오류 처리 정상)
 
 **아직 실제 키로 검증하지 않은 것 — 다음 세션의 시작점**
-W1(Claude 생성) → W2(Gemini 썸네일 + GitHub 업로드) → W3(Blogger 게시) 순으로 확인한다.
-사용자가 `SETUP.md` 대로 키를 넣은 뒤, 화면에 뜬 오류 메시지를 기준으로 잡는다.
+W1(Gemini 글 생성) → W2(Gemini 썸네일 + 본문 삽입) → W3(Blogger 게시) 순으로 확인한다.
+**사용자가 넣어야 할 건 Gemini 키 하나뿐이다**(클라이언트 ID 는 이미 저장돼 있다).
+화면에 뜬 오류 메시지를 기준으로 잡는다.
 
 **CORS 는 2026-08-19 에 네 API 모두 통과 확인했다(키 없이).** Pages 오리진에서 가짜 자격증명으로
 호출해 401/403 응답 본문을 읽을 수 있는지로 확인했다 — Blogger 401, Anthropic 401, Gemini 400,
@@ -123,12 +139,13 @@ GitHub 401. **즉 프록시나 확장 회귀 같은 구조 변경은 필요 없�
 브라우저 콘솔에서 잘못된 키로 한 번 호출해 보면 된다(네트워크 오류가 아니라 상태 코드가 읽히면 통과).
 
 남은 위험과 대응:
-1. **W2 Gemini 모델 ID** — 2026-08-19 에 `gemini-3.1-flash-image` 로 갱신했다(2.5 는 legacy).
-   그래도 "이미지 응답을 찾지 못했습니다" 나 404 면 문서에서 최신 ID 확인 후 `docs/js/gemini.js` 갱신.
-2. **W3 OAuth 403** — 동의 화면 테스트 사용자 미등록, 또는 이 계정이 해당 블로그 관리자가 아닐 때.
+1. **data URI 이미지를 Blogger 가 받아주는지** — 가장 불확실한 부분이다. 6번 항목의 대응을 따른다.
+2. **Gemini 텍스트 요청 형식** — `systemInstruction` 이 거부되면 `gemini.js` 가 알아서 한 번
+   재시도한다. 그래도 400 이면 응답 본문에 Google 이 이유를 적어주니 그걸 보고 고친다.
+3. **모델 ID** — 텍스트/이미지 모두 자주 갱신된다. "본문이 비어 있습니다"/"이미지 응답을 찾지
+   못했습니다"/404 면 문서에서 최신 ID 확인 후 `docs/js/gemini.js` 갱신.
+4. **W3 OAuth 403** — 동의 화면 테스트 사용자 미등록, 또는 이 계정이 해당 블로그 관리자가 아닐 때.
    (Blogger API 사용 설정과 테스트 사용자 등록은 2026-08-19 에 끝냈다.)
-3. **W2 GitHub 404** — 토큰 권한 부족일 때도 404 가 난다(리포 이름 문제로 오인하기 쉽다).
-   계정 이름을 바꿨으므로 예전 토큰이 있으면 리포 접근 범위를 다시 확인할 것.
 
 ## 9. 레거시: 크롬 확장 (`src/`, `manifest.json`)
 Blogger 편집기에 패널을 주입하던 v0.2~P2 버전. 웹앱으로 전환하면서 사용 중단했다.

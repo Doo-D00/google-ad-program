@@ -20,7 +20,8 @@ API 호출은 여기서 확인할 수 없습니다.</p>
 
 <script type="module">
 import { mdToHtml, splitTitle, esc, escAttr } from "../js/markdown.js";
-import { buildPath, cdnUrl } from "../js/github.js";
+import { shrinkToDataUrl, dataUrlBytes, humanSize, MAX_WIDTH } from "../js/embed.js";
+import { TEXT_MODELS, TEXT_MODEL_DEFAULT, IMAGE_MODEL } from "../js/gemini.js";
 
 const out = document.getElementById("out");
 let pass = 0, fail = 0;
@@ -75,15 +76,34 @@ check("escAttr 은 따옴표를 막는다", escAttr('a"b'), "a&quot;b");
 check("escAttr 은 홑따옴표도 막는다", escAttr("a'b"), "a&#39;b");
 check("escAttr 은 꺾쇠도 막는다", escAttr("<img>"), "&lt;img&gt;");
 
-// ── GitHub 경로 / CDN URL ──
-const p = buildPath({ prefix: "images", keyword: "계란찜 만드는법", mime: "image/png" });
-check("경로 prefix", p.startsWith("images/"), true);
-check("확장자", p.endsWith(".png"), true);
-check("jpeg 는 jpg 로", buildPath({ prefix: "i", keyword: "k", mime: "image/jpeg" }).endsWith(".jpg"), true);
-check("prefix 슬래시 정리", buildPath({ prefix: "/i/", keyword: "k", mime: "image/png" }).startsWith("i/"), true);
-check("CDN URL 형식",
-  cdnUrl({ owner: "o", repo: "r", branch: "b", path: "images/x.png" }),
-  "https://cdn.jsdelivr.net/gh/o/r@b/images/x.png");
+// ── 모델 목록 ──
+check("기본 글쓰기 모델이 목록에 있다", TEXT_MODELS.some((m) => m.id === TEXT_MODEL_DEFAULT), true);
+check("모델 항목은 id/label 을 갖는다", TEXT_MODELS.every((m) => !!m.id && !!m.label), true);
+check("이미지 모델은 2.5 legacy 가 아니다", IMAGE_MODEL !== "gemini-2.5-flash-image", true);
+
+// ── 본문 삽입용 이미지 축소 ──
+check("dataUrlBytes 는 문자열 길이", dataUrlBytes("abcde"), 5);
+check("dataUrlBytes 는 빈 값에 0", dataUrlBytes(null), 0);
+check("humanSize KB", humanSize(2048), "2KB");
+check("humanSize MB", humanSize(2 * 1024 * 1024), "2.0MB");
+
+function makePng(w, h) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const x = c.getContext("2d");
+  // 단색이면 JPEG 로 너무 잘 압축돼 축소 효과 확인이 무의미해진다. 무늬를 넣는다.
+  for (let i = 0; i < w; i += 8) { x.fillStyle = i % 16 ? "#3355ff" : "#ffcc00"; x.fillRect(i, 0, 8, h); }
+  return c.toDataURL("image/png");
+}
+
+const big = await shrinkToDataUrl(makePng(2000, 1000));
+check("가로 폭을 MAX_WIDTH 로 줄인다", big.width, MAX_WIDTH);
+check("비율을 유지한다", big.height, MAX_WIDTH / 2);
+check("data URI 를 돌려준다", big.dataUrl.startsWith("data:image/"), true);
+check("bytes 는 dataUrl 길이와 같다", big.bytes, big.dataUrl.length);
+
+const small = await shrinkToDataUrl(makePng(300, 150));
+check("작은 이미지는 확대하지 않는다", small.width, 300);
 
 // ── 결과 ──
 const sum = document.getElementById("summary");
