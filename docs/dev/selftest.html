@@ -21,7 +21,7 @@ API 호출은 여기서 확인할 수 없습니다.</p>
 <script type="module">
 import { mdToHtml, splitTitle, esc, escAttr } from "../js/markdown.js";
 import { shrinkToDataUrl, dataUrlBytes, humanSize, MAX_WIDTH } from "../js/embed.js";
-import { TEXT_MODELS, TEXT_MODEL_DEFAULT, IMAGE_MODEL } from "../js/gemini.js";
+import { TEXT_MODELS, TEXT_MODEL_DEFAULT, IMAGE_MODEL, isPlanQuota } from "../js/gemini.js";
 
 const out = document.getElementById("out");
 let pass = 0, fail = 0;
@@ -80,6 +80,14 @@ check("escAttr 은 꺾쇠도 막는다", escAttr("<img>"), "&lt;img&gt;");
 check("기본 글쓰기 모델이 목록에 있다", TEXT_MODELS.some((m) => m.id === TEXT_MODEL_DEFAULT), true);
 check("모델 항목은 id/label 을 갖는다", TEXT_MODELS.every((m) => !!m.id && !!m.label), true);
 check("이미지 모델은 2.5 legacy 가 아니다", IMAGE_MODEL !== "gemini-2.5-flash-image", true);
+
+// ── 429 구분: 기다리면 풀리는 것 vs 요금제 한도 ──
+check("요금제 한도형 429 를 알아본다",
+  isPlanQuota("You exceeded your current quota, please check your plan and billing details."), true);
+check("초당 제한형 429 는 요금제 문제가 아니다",
+  isPlanQuota("Resource has been exhausted (e.g. check quota)."), false);
+check("빈 본문은 요금제 문제가 아니다", isPlanQuota(""), false);
+check("null 본문도 안전하다", isPlanQuota(null), false);
 
 // ── 본문 삽입용 이미지 축소 ──
 check("dataUrlBytes 는 문자열 길이", dataUrlBytes("abcde"), 5);

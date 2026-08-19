@@ -121,7 +121,11 @@ $("genImage").addEventListener("click", async () => {
     $("thumbActions").classList.remove("hidden");
     say($("imgStatus"), "완료", "ok");
   } catch (e) {
-    say($("imgStatus"), e.message, "err");
+    // 이미지 생성은 무료 한도가 거의 없다. 막혔을 때 다음에 뭘 할지까지 알려준다.
+    const extra = gemini.isPlanQuota(e?.rawBody)
+      ? "\n\n이미지 생성은 무료 한도로는 막혀 있습니다. 글쓰기는 그대로 됩니다.\n대신 Blogger 편집기에서 [이미지 삽입]으로 직접 넣거나, 결제를 등록하면 열립니다."
+      : "";
+    say($("imgStatus"), e.message + extra, "err");
   } finally {
     busy(btn, false);
   }

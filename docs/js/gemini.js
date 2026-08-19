@@ -12,12 +12,16 @@
 export const IMAGE_MODEL = "gemini-3.1-flash-image";
 
 // 화면의 모델 선택에 그대로 쓰인다.
+// 2026-08-19 무료 한도로 실제 호출해 본 결과가 라벨에 반영되어 있다:
+//   3.1-flash-lite  3~5초에 안정적으로 성공 → 기본값
+//   3.7-flash       503(과부하)이 자주 난다. 재시도해도 안 되면 lite 로 내려서 쓴다.
+//   2.5-pro         429(한도 초과). 무료 한도가 거의 없다.
 export const TEXT_MODELS = [
-  { id: "gemini-3.7-flash", label: "gemini-3.7-flash (기본)" },
-  { id: "gemini-3.1-flash-lite", label: "gemini-3.1-flash-lite (빠르고 저렴)" },
-  { id: "gemini-2.5-pro", label: "gemini-2.5-pro (고품질)" },
+  { id: "gemini-3.1-flash-lite", label: "gemini-3.1-flash-lite (기본, 무료 한도로 잘 됨)" },
+  { id: "gemini-3.7-flash", label: "gemini-3.7-flash (고품질, 자주 혼잡함)" },
+  { id: "gemini-2.5-pro", label: "gemini-2.5-pro (유료 한도 필요)" },
 ];
-export const TEXT_MODEL_DEFAULT = "gemini-3.7-flash";
+export const TEXT_MODEL_DEFAULT = "gemini-3.1-flash-lite";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const IMAGE_TIMEOUT_MS = 180000;
@@ -27,21 +31,38 @@ const TEST_TIMEOUT_MS = 30000;
 // 텍스트도 thinking 이 붙어 출력 토큰을 나눠 쓴다. 작게 잡으면 본문이 비거나 잘린다.
 const MAX_OUTPUT_TOKENS = 16384;
 
+// 429 는 두 가지가 섞여 온다. "잠시 후 재시도"로 풀리는 초당 요청 제한과,
+// 요금제 자체에 한도가 없어서 기다려도 안 풀리는 경우다. 응답 본문으로 구분한다.
+// (무료 한도에서 이미지 생성은 후자였다 — 2026-08-19 확인)
+export function isPlanQuota(bodyText) {
+  return /billing|plan|exceeded your current quota/i.test(bodyText || "");
+}
+
 function explainHttpError(status, bodyText) {
   let apiMsg = "";
   try { apiMsg = JSON.parse(bodyText)?.error?.message || ""; } catch (_) { apiMsg = (bodyText || "").slice(0, 300); }
-  const hint = {
+  let hint = {
     400: "요청이 거부되었습니다. 키가 올바른지, 모델 ID가 최신인지 확인하세요.",
     403: "이 키로는 접근 권한이 없습니다. 키가 이 API 에 대해 활성화되어 있는지 확인하세요.",
     404: "모델을 찾을 수 없습니다. 모델 ID를 확인하세요.",
     429: "요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.",
     500: "Google 서버 오류입니다. 잠시 후 재시도하세요.",
-    503: "모델이 과부하 상태입니다. 잠시 후 재시도하세요.",
+    503: "모델이 과부하 상태입니다. 다른 모델로 바꿔 보세요.",
   }[status] || "";
+  if (status === 429 && isPlanQuota(bodyText)) {
+    hint = "이 모델은 지금 요금제의 한도를 넘었습니다. 기다려도 풀리지 않습니다 — " +
+      "다른 모델을 쓰거나 https://ai.dev/rate-limit 에서 한도를 확인하세요.";
+  }
   return `Gemini 오류(${status})${hint ? " — " + hint : ""}${apiMsg ? "\n" + apiMsg : ""}`;
 }
 
-async function call({ apiKey, model, body, timeoutMs }) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 503(과부하)과 초당 요청 제한형 429 는 조금 기다리면 풀린다. 사용자가 직접 다시 누르게
+// 만들지 않고 짧게 두 번 더 시도한다. 요금제 한도형 429 는 기다려도 소용없으므로 바로 던진다.
+const RETRY_DELAYS_MS = [2000, 5000];
+
+async function callOnce({ apiKey, model, body, timeoutMs }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -64,6 +85,18 @@ async function call({ apiKey, model, body, timeoutMs }) {
     throw e;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function call(args) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await callOnce(args);
+    } catch (e) {
+      const transient = e?.status === 503 || e?.status === 500 || (e?.status === 429 && !isPlanQuota(e?.rawBody));
+      if (!transient || attempt >= RETRY_DELAYS_MS.length) throw e;
+      await sleep(RETRY_DELAYS_MS[attempt]);
+    }
   }
 }
 

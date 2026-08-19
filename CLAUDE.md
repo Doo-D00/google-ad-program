@@ -50,7 +50,10 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
   `"generationConfig":{"maxOutputTokens":16384}}`
 - 응답: `candidates[0].content.parts[].text` (thought 파트는 제외), `finishReason`,
   차단 시 `promptFeedback.blockReason`
-- 모델(2026-08-19): `gemini-3.7-flash`(기본) / `gemini-3.1-flash-lite`(싸고 빠름) / `gemini-2.5-pro`(고품질)
+- 모델(2026-08-19 무료 한도 실측): `gemini-3.1-flash-lite`(**기본** — 3~5초에 안정적으로 성공) /
+  `gemini-3.7-flash`(품질은 낫지만 503 과부하가 잦다) / `gemini-2.5-pro`(429, 무료 한도로는 거의 못 쓴다)
+- 503/500 과 초당 제한형 429 는 2초·5초 간격으로 두 번 더 재시도한다. 요금제 한도형 429 는
+  기다려도 안 풀리므로 재시도하지 않고 바로 알린다(`isPlanQuota`).
 - `maxOutputTokens` 는 넉넉히. Gemini 3 도 thinking 이 출력 토큰을 나눠 쓰므로 작게 잡으면 본문이 빈다.
 - **`systemInstruction` 을 거부하면 지시를 본문 앞에 붙여 한 번 재시도한다**(`gemini.js` 참고).
   형식이 바뀌어도 조용히 죽지 않게 하려는 안전장치다.
@@ -73,8 +76,11 @@ dev-serve.ps1         docs/ 를 localhost:8765 로 띄우는 개발용 서버
 
 ## 5. 빌드 단계
 - [x] **W0. 뼈대** — 화면, 설정 저장, 커서 삽입, 미리보기. (버튼 삽입/미리보기는 실제 브라우저 검증 완료)
-- [ ] **W1. 글쓰기** — 실제 Gemini 키로 생성 확인. 프롬프트/말투 다듬기.
-- [ ] **W2. 썸네일** — ~~모델 ID 최신화~~(완료) → 생성 → ~~축소/삽입~~(selftest 통과) → 실제 키로 확인.
+- [x] **W1. 글쓰기** — 2026-08-19 실제 키로 성공. `gemini-3.1-flash-lite` 로 3~5초, 1100~1300자,
+      "# 제목" 출력 형식도 지켜졌다. 말투 다듬기는 W4 로 미룬다.
+- [ ] **W2. 썸네일** — ⛔ **무료 한도로는 막혀 있다.** 이미지 모델 4개 전부 429
+      (`exceeded your current quota ... check your plan and billing`). 코드 문제가 아니라 요금제 문제다.
+      결제를 붙이면 그때 확인한다. 축소/삽입 로직은 selftest 로 검증돼 있다.
 - [ ] **W3. 게시** — ~~Cloud Console 설정(SETUP.md)~~(완료) → 로그인 → 초안 게시 → 공개 발행 확인.
       브라우저 CORS 는 통과 확인됨(8번 참고). **data URI 이미지를 Blogger 가 받아주는지는 미검증** ↓
 - [ ] **W4. 다듬기** — 라벨(태그) 입력, 이미지 여러 장, 초안 불러와 수정, 히스토리 등.
